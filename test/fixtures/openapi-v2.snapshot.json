@@ -1,0 +1,4599 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Sedis PartnerAPI v2",
+    "description": "The Sedis PartnerAPI v2 is a REST + JSON API for programmatic access to Sedis Fastighetsbenchmark and Bolagsanalys data.\n\nAuthenticate with the `X-Api-Key` header (issued per customer). Responses are camelCase and paged with the bare `{data, page, pageSize, totalCount, totalPages}` envelope.\n\nA CompDatum value carries EXACTLY ONE of `figure` (decimal) or `date` (ISO `yyyy-MM-dd`): parameters whose code starts with 'D' are date-typed and populate `date` (with `figure` null); all others populate `figure` (with `date` null). The `lastUpdatedUtc` field is a full UTC instant.\n\nThe code-defined CompDatum enum domains are published as typed integer-enum component schemas (CompClassification = EA0, CompTransactionKind = EC0, CompTransactionType = ED0, CompEpcEnvironmentalRating = EE0, CompValuationMethod = EF0, CompValuationAgency = EG0, CompSustainabilityCertification = EH0); a CompDatum enum value's `enum.value` is the integer they enumerate. EB0 (PropertyType) is the exception: it is DATA-DRIVEN (a database table, not a compile-time enum) and therefore has no static schema — discover its live domain at runtime via `/v2/fastighetsbenchmark/parameters/EB0` (`enumValues`).",
+    "contact": {
+      "name": "Sedis AB",
+      "url": "https://www.sedis.se/",
+      "email": "info@sedis.se"
+    },
+    "version": "2.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.sedis.se",
+      "description": "Production"
+    }
+  ],
+  "paths": {
+    "/v2/status": {
+      "get": {
+        "tags": [
+          "PartnerApiV2Status"
+        ],
+        "summary": "Returns a camelCase status payload whose `message` is localized by the resolved request\nculture: English by default, Swedish when the caller sends `?lang=sv` or\n`Accept-Language: sv` (LOC-03b). Proves the `/v2` localization branch defaults to\nEnglish without touching the GUI sv-SE pipeline.",
+        "operationId": "GetPartnerApiV2Status",
+        "parameters": [
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2StatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/comp-data": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Lists CompDatum time-series rows for the calling tenant.",
+        "description": "Returns the v2 comp-data list (camelCase, bare envelope), tenant-scoped via the parent Comp join. Each row is self-describing via dataType (decimal|boolean|enum|date — from the parameterCode's first letter): decimal populates figure; boolean populates boolean (+ raw figure); enum populates enum {value,name,enumType} (+ raw figure), its full domain discoverable via /parameters/{code}; date populates date (ISO yyyy-MM-dd). valueDate is the period the value applies to (the natural-key part), distinct from the date-typed value itself. Supports paging, whitelisted sort, sparse fieldsets, ?count=false (bulk-sync count opt-out, D-12), and the named filters sedisId, sedisIdIn, parameterCode, fromDate, toDate.",
+        "operationId": "GetPartnerApiV2FbmCompData",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number (default 1). Combine with pageSize to walk a result set.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Number of rows per page (default 50, clamped to a maximum of 500; when clamped the response carries the Sedis-Page-Size-Clamped: true header).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Comma-separated whitelisted sort fields; prefix a field with '-' for descending (e.g. sort=name,-valueDate). Only the fields a given resource exposes are accepted — an unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset: limits the response to the named fields and opts IN to optional fields (e.g. fields=sedisId,name,geometry). An unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "description": "When false, the bulk-sync count opt-out (D-12): totalCount and totalPages are returned null to skip the count query. Defaults to true.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "sedisId",
+            "in": "query",
+            "description": "Exact-match filter on the resource's SedisId (the string natural key).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sedisIdIn",
+            "in": "query",
+            "description": "COMMA-SEPARATED list of SedisIds to match (e.g. sedisIdIn=PU-1,PU-2,PU-3). This is a single comma-delimited string value, NOT a repeated parameter or JSON array. Rows whose SedisId is in the set are returned.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "parameterCode",
+            "in": "query",
+            "description": "Exact-match filter on the parameter code (e.g. the CompParameterCode discovered via the parameters resource). A 'D'-prefixed code is date-typed (populates date; figure null).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fromDate",
+            "in": "query",
+            "description": "Inclusive lower bound (ISO yyyy-MM-dd) on valueDate.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "toDate",
+            "in": "query",
+            "description": "Inclusive upper bound (ISO yyyy-MM-dd) on valueDate.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfCompDatumResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/parameters": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Lists Fastighetsbenchmark parameters (reference data; English-default text).",
+        "description": "Returns the v2 Fastighetsbenchmark parameters list (camelCase, bare envelope). Reference data — identical for every API key. name/groupName/description/unit are English by default, Swedish via ?lang=sv. Supports paging, whitelisted sort, sparse fieldsets, and the named filters code, groupName, nameContains.",
+        "operationId": "GetPartnerApiV2FbmParameters",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number (default 1). Combine with pageSize to walk a result set.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Number of rows per page (default 50, clamped to a maximum of 500; when clamped the response carries the Sedis-Page-Size-Clamped: true header).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Comma-separated whitelisted sort fields; prefix a field with '-' for descending (e.g. sort=name,-valueDate). Only the fields a given resource exposes are accepted — an unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset: limits the response to the named fields and opts IN to optional fields (e.g. fields=sedisId,name,geometry). An unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "description": "When false, the bulk-sync count opt-out (D-12): totalCount and totalPages are returned null to skip the count query. Defaults to true.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Exact-match filter on the parameter code (e.g. NX71).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupName",
+            "in": "query",
+            "description": "Exact-match filter on the parameter group display name (e.g. 'Nyckeltal').",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nameContains",
+            "in": "query",
+            "description": "Case-insensitive substring filter on the resource name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfCompParameterResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/parameters/{code}": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Resolves a single parameter by code (404 when not found, D-03).",
+        "operationId": "GetPartnerApiV2FbmParameter",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "description": "Exact-match filter on the parameter code (e.g. NX71).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompParameterResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found RFC 7807 ProblemDetails. extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/comp-uploads": {
+      "post": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Ingests customer data into the CompUpload pipeline for the calling tenant.",
+        "description": "Stages a CompUpload (one ValueDate) owned by the calling API key's tenant (the owner is NEVER read from the body). Requires a mandatory Idempotency-Key header; replaying the same key returns the original response without staging a duplicate. Returns 201 with the staged upload id + status; 409 when a non-Uploaded upload already exists for the same ValueDate; 400 (RFC 7807, extensions.invalidFields) on validation errors.",
+        "operationId": "CreatePartnerApiV2FbmCompUpload",
+        "parameters": [
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompUploadRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompUploadIngestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/jamforelseobjekt": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Lists Jämförelseobjekt visible to the calling tenant.",
+        "description": "Returns the v2 jamforelseobjekt list (camelCase, bare envelope), scoped to the calling API key's tenant. Each row is the tenant's clone of a SedisObjekt. Supports paging, whitelisted sort, sparse fieldsets (including the opt-in containsPropertyUnits forward clone-lineage), and the named filters sedisId, sedisIdIn, nameContains, isCloneOfSedisObjektSedisId.",
+        "operationId": "GetPartnerApiV2FbmJamforelseobjekt",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number (default 1). Combine with pageSize to walk a result set.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Number of rows per page (default 50, clamped to a maximum of 500; when clamped the response carries the Sedis-Page-Size-Clamped: true header).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Comma-separated whitelisted sort fields; prefix a field with '-' for descending (e.g. sort=name,-valueDate). Only the fields a given resource exposes are accepted — an unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset: limits the response to the named fields and opts IN to optional fields (e.g. fields=sedisId,name,geometry). An unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "description": "When false, the bulk-sync count opt-out (D-12): totalCount and totalPages are returned null to skip the count query. Defaults to true.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "sedisId",
+            "in": "query",
+            "description": "Exact-match filter on the resource's SedisId (the string natural key).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sedisIdIn",
+            "in": "query",
+            "description": "COMMA-SEPARATED list of SedisIds to match (e.g. sedisIdIn=PU-1,PU-2,PU-3). This is a single comma-delimited string value, NOT a repeated parameter or JSON array. Rows whose SedisId is in the set are returned.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nameContains",
+            "in": "query",
+            "description": "Case-insensitive substring filter on the resource name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "isCloneOfSedisObjektSedisId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "bbox",
+            "in": "query",
+            "description": "Geospatial bounding-box filter as 'minLon,minLat,maxLon,maxLat' (WGS84 / EPSG:4326 decimal degrees). Mutually exclusive with near*/wkt.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nearLon",
+            "in": "query",
+            "description": "Longitude (WGS84 decimal degrees) of the centre point for a radius filter; use together with nearLat and radiusM.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "nearLat",
+            "in": "query",
+            "description": "Latitude (WGS84 decimal degrees) of the centre point for a radius filter; use together with nearLon and radiusM.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "radiusM",
+            "in": "query",
+            "description": "Radius in metres for the near (point) filter; use together with nearLon and nearLat.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "wkt",
+            "in": "query",
+            "description": "Geospatial filter as a WKT geometry (WGS84 / EPSG:4326). Mutually exclusive with bbox/near*.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfZoneResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/jamforelseobjekt/{sedisId}": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Resolves a single Jämförelseobjekt by SedisId. Returns 404 for a not-found OR cross-tenant SedisId\n— the tenant filter makes another tenant's row invisible (D-03).",
+        "operationId": "GetPartnerApiV2FbmJamforelseobjektById",
+        "parameters": [
+          {
+            "name": "sedisId",
+            "in": "path",
+            "description": "The SedisId (string natural key) of the resource to fetch.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset: limits the response to the named fields and opts IN to optional fields (e.g. fields=sedisId,name,geometry). An unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoneResponse"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "content": {
+              "application/json": { }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found RFC 7807 ProblemDetails. extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/jamforelseobjekt/search": {
+      "post": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Searches Jämförelseobjekt via POST (complex geometry escape hatch; same envelope as the GET).",
+        "operationId": "SearchPartnerApiV2FbmJamforelseobjekt",
+        "parameters": [
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartnerApiV2SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfZoneResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/property-units": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Lists Fastigheter visible to the calling tenant.",
+        "description": "Returns the v2 property-units list (camelCase, bare envelope), scoped to the calling API key's tenant. Supports paging, whitelisted sort, sparse fieldsets, and the named filters sedisId, sedisIdIn, nameContains, municipalityId, propertyType, propertyTypeName.",
+        "operationId": "GetPartnerApiV2FbmPropertyUnits",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number (default 1). Combine with pageSize to walk a result set.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Number of rows per page (default 50, clamped to a maximum of 500; when clamped the response carries the Sedis-Page-Size-Clamped: true header).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Comma-separated whitelisted sort fields; prefix a field with '-' for descending (e.g. sort=name,-valueDate). Only the fields a given resource exposes are accepted — an unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset: limits the response to the named fields and opts IN to optional fields (e.g. fields=sedisId,name,geometry). An unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "description": "When false, the bulk-sync count opt-out (D-12): totalCount and totalPages are returned null to skip the count query. Defaults to true.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "sedisId",
+            "in": "query",
+            "description": "Exact-match filter on the resource's SedisId (the string natural key).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sedisIdIn",
+            "in": "query",
+            "description": "COMMA-SEPARATED list of SedisIds to match (e.g. sedisIdIn=PU-1,PU-2,PU-3). This is a single comma-delimited string value, NOT a repeated parameter or JSON array. Rows whose SedisId is in the set are returned.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nameContains",
+            "in": "query",
+            "description": "Case-insensitive substring filter on the resource name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "municipalityId",
+            "in": "query",
+            "description": "Integer municipality id filter. Valid ids appear as municipality.id on property-unit rows (there is no separate lookup resource).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "propertyType",
+            "in": "query",
+            "description": "Integer property-type id filter (NOT a name). Valid ids appear as propertyType.id on property-unit rows.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "propertyTypeName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "belongsToJamforelseobjektSedisId",
+            "in": "query",
+            "description": "Reverse-lineage filter: returns property-units belonging to the Jämförelseobjekt (benchmark/comparison zone) with this SedisId — pass the zone's sedisId, not a property-unit sedisId.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "bbox",
+            "in": "query",
+            "description": "Geospatial bounding-box filter as 'minLon,minLat,maxLon,maxLat' (WGS84 / EPSG:4326 decimal degrees). Mutually exclusive with near*/wkt.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nearLon",
+            "in": "query",
+            "description": "Longitude (WGS84 decimal degrees) of the centre point for a radius filter; use together with nearLat and radiusM.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "nearLat",
+            "in": "query",
+            "description": "Latitude (WGS84 decimal degrees) of the centre point for a radius filter; use together with nearLon and radiusM.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "radiusM",
+            "in": "query",
+            "description": "Radius in metres for the near (point) filter; use together with nearLon and nearLat.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "wkt",
+            "in": "query",
+            "description": "Geospatial filter as a WKT geometry (WGS84 / EPSG:4326). Mutually exclusive with bbox/near*.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfPropertyUnitResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/property-units/{sedisId}": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Resolves a single Fastighet by SedisId. Returns 404 (NOT 403, NOT the row) for a not-found OR\ncross-tenant SedisId — the tenant filter makes another tenant's row invisible (D-03).",
+        "operationId": "GetPartnerApiV2FbmPropertyUnitById",
+        "parameters": [
+          {
+            "name": "sedisId",
+            "in": "path",
+            "description": "The SedisId (string natural key) of the resource to fetch.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset: limits the response to the named fields and opts IN to optional fields (e.g. fields=sedisId,name,geometry). An unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyUnitResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found RFC 7807 ProblemDetails. extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/property-units/search": {
+      "post": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Searches Fastigheter by a complex body geometry + the same named filters as the GET.",
+        "operationId": "SearchPartnerApiV2FbmPropertyUnits",
+        "parameters": [
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartnerApiV2SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfPropertyUnitResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/reference-zones": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Lists external-reference Zones (shared across all tenants).",
+        "description": "Returns the v2 reference-zones list (camelCase, bare envelope). Reference data — Sedis-owned non-clone Zones, identical for every API key. Supports paging, whitelisted sort, sparse fieldsets, and the named filters sedisId, sedisIdIn, nameContains.",
+        "operationId": "GetPartnerApiV2FbmReferenceZones",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number (default 1). Combine with pageSize to walk a result set.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Number of rows per page (default 50, clamped to a maximum of 500; when clamped the response carries the Sedis-Page-Size-Clamped: true header).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Comma-separated whitelisted sort fields; prefix a field with '-' for descending (e.g. sort=name,-valueDate). Only the fields a given resource exposes are accepted — an unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset: limits the response to the named fields and opts IN to optional fields (e.g. fields=sedisId,name,geometry). An unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "description": "When false, the bulk-sync count opt-out (D-12): totalCount and totalPages are returned null to skip the count query. Defaults to true.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "sedisId",
+            "in": "query",
+            "description": "Exact-match filter on the resource's SedisId (the string natural key).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sedisIdIn",
+            "in": "query",
+            "description": "COMMA-SEPARATED list of SedisIds to match (e.g. sedisIdIn=PU-1,PU-2,PU-3). This is a single comma-delimited string value, NOT a repeated parameter or JSON array. Rows whose SedisId is in the set are returned.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nameContains",
+            "in": "query",
+            "description": "Case-insensitive substring filter on the resource name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfZoneResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/reference-zones/{sedisId}": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Resolves a single reference Zone by SedisId (404 when not found, D-03).",
+        "operationId": "GetPartnerApiV2FbmReferenceZoneById",
+        "parameters": [
+          {
+            "name": "sedisId",
+            "in": "path",
+            "description": "The SedisId (string natural key) of the resource to fetch.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZoneResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found RFC 7807 ProblemDetails. extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/samlingar": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Lists Samlingar visible to the calling tenant.",
+        "description": "Returns the v2 samlingar list (camelCase, bare envelope), scoped to the calling API key's tenant (only customer-owned collections; SedisAB-owned SedisObjekt collections are not partner-fetchable). Supports paging, whitelisted sort, sparse fieldsets, and the named filters sedisId, sedisIdIn, nameContains.",
+        "operationId": "GetPartnerApiV2FbmSamlingar",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number (default 1). Combine with pageSize to walk a result set.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Number of rows per page (default 50, clamped to a maximum of 500; when clamped the response carries the Sedis-Page-Size-Clamped: true header).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Comma-separated whitelisted sort fields; prefix a field with '-' for descending (e.g. sort=name,-valueDate). Only the fields a given resource exposes are accepted — an unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset: limits the response to the named fields and opts IN to optional fields (e.g. fields=sedisId,name,geometry). An unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "description": "When false, the bulk-sync count opt-out (D-12): totalCount and totalPages are returned null to skip the count query. Defaults to true.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "sedisId",
+            "in": "query",
+            "description": "Exact-match filter on the resource's SedisId (the string natural key).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sedisIdIn",
+            "in": "query",
+            "description": "COMMA-SEPARATED list of SedisIds to match (e.g. sedisIdIn=PU-1,PU-2,PU-3). This is a single comma-delimited string value, NOT a repeated parameter or JSON array. Rows whose SedisId is in the set are returned.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nameContains",
+            "in": "query",
+            "description": "Case-insensitive substring filter on the resource name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "bbox",
+            "in": "query",
+            "description": "Geospatial bounding-box filter as 'minLon,minLat,maxLon,maxLat' (WGS84 / EPSG:4326 decimal degrees). Mutually exclusive with near*/wkt.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nearLon",
+            "in": "query",
+            "description": "Longitude (WGS84 decimal degrees) of the centre point for a radius filter; use together with nearLat and radiusM.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "nearLat",
+            "in": "query",
+            "description": "Latitude (WGS84 decimal degrees) of the centre point for a radius filter; use together with nearLon and radiusM.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "radiusM",
+            "in": "query",
+            "description": "Radius in metres for the near (point) filter; use together with nearLon and nearLat.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "wkt",
+            "in": "query",
+            "description": "Geospatial filter as a WKT geometry (WGS84 / EPSG:4326). Mutually exclusive with bbox/near*.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfCompCollectionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Creates a customer-owned Samling (D-35, API-13). The owning tenant is stamped from the API key's\nIPartnerApiTenantContext — NEVER the request body (T-62-08-01). Triggers the existing\nrecalc cascade (create-path BJ0=1 gate + `CalculationRequestQueue` enqueue). Requires a\nmandatory `Idempotency-Key` header (replay-safe via IdempotencyKeyFilter).",
+        "description": "Creates a Samling owned by the calling API key's tenant (the owner is NEVER read from the body). Requires a mandatory Idempotency-Key header; replaying the same key returns the original response without creating a duplicate. Returns 201 with the created resource; 409 when a Samling with the same name already exists within the tenant; 400 (RFC 7807, extensions.invalidFields) on validation errors.",
+        "operationId": "CreatePartnerApiV2FbmSamling",
+        "parameters": [
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSamlingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompCollectionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/samlingar/{sedisId}": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Resolves a single Samling by SedisId. Returns 404 for a not-found OR cross-tenant SedisId — the\ntenant filter makes another tenant's row invisible (D-03).",
+        "operationId": "GetPartnerApiV2FbmSamlingById",
+        "parameters": [
+          {
+            "name": "sedisId",
+            "in": "path",
+            "description": "The SedisId (string natural key) of the resource to fetch.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset: limits the response to the named fields and opts IN to optional fields (e.g. fields=sedisId,name,geometry). An unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompCollectionResponse"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified",
+            "content": {
+              "application/json": { }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found RFC 7807 ProblemDetails. extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Full replace of an existing customer-owned Samling's name + member set (SED-904). The owning tenant\ncomes from IPartnerApiTenantContext, NEVER the body (T-62-08-01); the `{sedisId}`\nis resolved tenant-scoped, so a not-found OR cross-tenant id returns 404 (never 403, no leak — D-03).\nBecause the member set changed, the recalc cascade is re-triggered (via the new\n`ICompCollectionService.UpdateCollectionAsync`). PUT is idempotent by HTTP semantics, so it does\nNOT require the `Idempotency-Key` header (the mandatory-key filter is POST-only, 62-08).",
+        "description": "Full replace of the Samling's name and member set. The owner is NEVER read from the body; the {sedisId} is resolved scoped to the calling API key's tenant, so updating another tenant's Samling returns 404. Replacing the member set re-triggers the recalculation cascade. PUT is idempotent and does NOT require the Idempotency-Key header. Returns 200 with the updated resource; 404 when the Samling does not exist for the tenant; 400 (RFC 7807) on validation errors.",
+        "operationId": "UpdatePartnerApiV2FbmSamling",
+        "parameters": [
+          {
+            "name": "sedisId",
+            "in": "path",
+            "description": "The SedisId (string natural key) of the resource to fetch.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSamlingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompCollectionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found RFC 7807 ProblemDetails. extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Deletes an existing customer-owned Samling (SED-904), cascading the CompData/tags cleanup via the\nexisting `ICompCollectionService.DeleteCollectionAsync` → `DeleteSedisObjectAsync`. The\n`{sedisId}` is resolved tenant-scoped: a not-found OR cross-tenant id returns 404 (never 403).\nIdempotent by HTTP semantics (a second DELETE of the same id → 404); does NOT require the\n`Idempotency-Key` header (POST-only, 62-08).",
+        "description": "Deletes the Samling and cascades its related CompData/tags cleanup. The {sedisId} is resolved scoped to the calling API key's tenant, so deleting another tenant's Samling returns 404. Returns 204 No Content on success; 404 when the Samling does not exist for the tenant. DELETE is idempotent and does NOT require the Idempotency-Key header.",
+        "operationId": "DeletePartnerApiV2FbmSamling",
+        "parameters": [
+          {
+            "name": "sedisId",
+            "in": "path",
+            "description": "The SedisId (string natural key) of the resource to fetch.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found RFC 7807 ProblemDetails. extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/samlingar/search": {
+      "post": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Searches Samlingar via POST (complex geometry escape hatch; same envelope as the GET).",
+        "operationId": "SearchPartnerApiV2FbmSamlingar",
+        "parameters": [
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartnerApiV2SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfCompCollectionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/bolagsanalys/companies": {
+      "get": {
+        "tags": [
+          "Bolagsanalys"
+        ],
+        "summary": "Lists companies. Supports paging (`?page`/`?pageSize`), whitelisted sort\n(`?sort=field,-field`), sparse fieldsets (`?fields=`), the count opt-out\n(`?count=false`), and the named filters `?companyId=`, `?nameContains=`,\n`?countryCode=` (D-15). Returns the bare camelCase envelope.",
+        "description": "Returns the v2 REST companies list (camelCase, bare envelope). Supports paging, whitelisted sort, sparse fieldsets, and the named filters companyId, nameContains, countryCode.",
+        "operationId": "GetPartnerApiV2BolagsanalysCompanies",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number (default 1). Combine with pageSize to walk a result set.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Number of rows per page (default 50, clamped to a maximum of 500; when clamped the response carries the Sedis-Page-Size-Clamped: true header).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Comma-separated whitelisted sort fields; prefix a field with '-' for descending (e.g. sort=name,-valueDate). Only the fields a given resource exposes are accepted — an unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset: limits the response to the named fields and opts IN to optional fields (e.g. fields=sedisId,name,geometry). An unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "description": "When false, the bulk-sync count opt-out (D-12): totalCount and totalPages are returned null to skip the count query. Defaults to true.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "companyId",
+            "in": "query",
+            "description": "Exact-match filter on the Sedis company id (Company.ExternalId — a Sedis-internal key, NOT a SEC CIK).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nameContains",
+            "in": "query",
+            "description": "Case-insensitive substring filter on the resource name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "countryCode",
+            "in": "query",
+            "description": "ISO-3166 alpha-2 country-code filter (e.g. SE).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfCompanyResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/bolagsanalys/data": {
+      "get": {
+        "tags": [
+          "Bolagsanalys"
+        ],
+        "summary": "Lists data points. Supports paging, whitelisted sort, sparse fieldsets, the count opt-out, and\nthe named filters `?companyId=`, `?parameterCode=`, `?fromDate=`, `?toDate=`,\n`?quarterId=` (D-15). The quarter filters accept either the encoded number\n(`20251`) or the readable form (`2025Q1`).",
+        "description": "Returns the v2 REST data list (camelCase, bare envelope). quarterId is a bare number (20251 = 2025 Q1). Supports paging, whitelisted sort, sparse fieldsets, and the named filters companyId, parameterCode, fromDate, toDate, quarterId (each quarter filter accepts 20251 or 2025Q1).",
+        "operationId": "GetPartnerApiV2BolagsanalysData",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number (default 1). Combine with pageSize to walk a result set.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Number of rows per page (default 50, clamped to a maximum of 500; when clamped the response carries the Sedis-Page-Size-Clamped: true header).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Comma-separated whitelisted sort fields; prefix a field with '-' for descending (e.g. sort=name,-valueDate). Only the fields a given resource exposes are accepted — an unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset: limits the response to the named fields and opts IN to optional fields (e.g. fields=sedisId,name,geometry). An unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "description": "When false, the bulk-sync count opt-out (D-12): totalCount and totalPages are returned null to skip the count query. Defaults to true.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "companyId",
+            "in": "query",
+            "description": "Exact-match filter on the Sedis company id (Company.ExternalId — a Sedis-internal key, NOT a SEC CIK).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "parameterCode",
+            "in": "query",
+            "description": "Exact-match filter on the parameter code (e.g. the CompParameterCode discovered via the parameters resource). A 'D'-prefixed code is date-typed (populates date; figure null).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fromDate",
+            "in": "query",
+            "description": "Inclusive lower bound (ISO yyyy-MM-dd) on valueDate.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "toDate",
+            "in": "query",
+            "description": "Inclusive upper bound (ISO yyyy-MM-dd) on valueDate.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "quarterId",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfDatumResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/bolagsanalys/data/search": {
+      "post": {
+        "tags": [
+          "Bolagsanalys"
+        ],
+        "summary": "Searches Bolagsanalys data for up to 50 companies via POST (same envelope as the GET).",
+        "description": "Returns the v2 REST data list (camelCase, bare envelope) for the supplied companyIds (max 50 — over the cap is a 400, never truncated). Carries the GET's named filters (companyId, parameterCode, fromDate, toDate, quarterId; each quarter filter accepts 20251 or 2025Q1) so the search is a strict superset of GET /v2/bolagsanalys/data. Cache-Control: no-store.",
+        "operationId": "SearchPartnerApiV2BolagsanalysData",
+        "parameters": [
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BolagsanalysDataSearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfDatumResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/bolagsanalys/parameters": {
+      "get": {
+        "tags": [
+          "Bolagsanalys"
+        ],
+        "summary": "Lists parameters. Supports paging, whitelisted sort, sparse fieldsets, the count opt-out, and\nthe named filters `?code=`, `?groupName=`, `?nameContains=` (D-15). Text is\nEnglish by default, Swedish via `?lang=sv` / `Accept-Language: sv`.",
+        "description": "Returns the v2 REST parameters list (camelCase, bare envelope). Reference data — identical for every API key. name/groupName/description are English by default, Swedish via ?lang=sv. Supports paging, whitelisted sort, sparse fieldsets, and the named filters code, groupName, nameContains.",
+        "operationId": "GetPartnerApiV2BolagsanalysParameters",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number (default 1). Combine with pageSize to walk a result set.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Number of rows per page (default 50, clamped to a maximum of 500; when clamped the response carries the Sedis-Page-Size-Clamped: true header).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Comma-separated whitelisted sort fields; prefix a field with '-' for descending (e.g. sort=name,-valueDate). Only the fields a given resource exposes are accepted — an unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset: limits the response to the named fields and opts IN to optional fields (e.g. fields=sedisId,name,geometry). An unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "description": "When false, the bulk-sync count opt-out (D-12): totalCount and totalPages are returned null to skip the count query. Defaults to true.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Exact-match filter on the parameter code (e.g. NX71).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupName",
+            "in": "query",
+            "description": "Exact-match filter on the parameter group display name (e.g. 'Nyckeltal').",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nameContains",
+            "in": "query",
+            "description": "Case-insensitive substring filter on the resource name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfParameterResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "BolagsanalysDataSearchRequest": {
+        "type": "object",
+        "properties": {
+          "companyIds": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The multi-company key list (`companyId` ← `Company.ExternalId`). Capped at 50 (D-01) —\nover the cap is a 400, NEVER truncated."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The 1-indexed page (D-11); defaults applied by the controller.",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The page size (D-11); clamped to the max by the controller.",
+            "format": "int32"
+          },
+          "sort": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Whitelisted `field,-field` sort expression (D-14)."
+          },
+          "fields": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Flat sparse-fieldset list (D-13)."
+          },
+          "count": {
+            "type": "boolean",
+            "description": "Whether to compute the total count (false → bulk-sync opt-out, D-12)."
+          },
+          "companyId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Exact-match on the company key (`companyId` ← `Company.ExternalId`); OR'd with string[]? BolagsanalysDataSearchRequest.CompanyIds."
+          },
+          "parameterCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Exact-match on the parameter code."
+          },
+          "fromDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Inclusive lower bound on the quarter (accepts `20251` or `2025Q1`)."
+          },
+          "toDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Inclusive upper bound on the quarter (accepts `20251` or `2025Q1`)."
+          },
+          "quarterId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Exact-match on a single quarter (accepts `20251` or `2025Q1`)."
+          }
+        },
+        "description": "The request body for `POST /v2/bolagsanalys/data/search` (SHAPE-01 / D-02). Carries a\nmulti-company key list (string[]? BolagsanalysDataSearchRequest.CompanyIds, capped at 50 — D-01) plus the SAME query-shape\n(page/pageSize/sort/fields/count) and named filters the GET `/v2/bolagsanalys/data` supports —\nso the response envelope, item schema and camelCase are identical to the GET, and the search is a\nstrict superset of it. Bolagsanalys is REFERENCE data, so there is no geometry and no tenant\ndimension. POST search sets `Cache-Control: no-store` and emits no ETag (D-36)."
+      },
+      "CompanyResponse": {
+        "required": [
+          "companyId",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "companyId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "nextReportDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "isInactive": {
+            "type": "boolean"
+          },
+          "latestReportUri": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "countryCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "nationalIdentificationNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CompClassification": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "description": "Comp classification (EA0 — Typ av fastighet). The integer carried by a CompDatum value's `enum.value` for parameter code EA0. Values: 0 = None; 1 = Management; 2 = Project; 3 = Transactional. The live domain is also discoverable at runtime via `/v2/fastighetsbenchmark/parameters/EA0` (`enumValues`).",
+        "format": "int32"
+      },
+      "CompCollectionResponse": {
+        "required": [
+          "sedisId",
+          "name",
+          "sourceName",
+          "insertedOnUtc",
+          "lastUpdatedUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "filterFrom": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "filterTo": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "containingCompSedisIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sedisId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sourceName": {
+            "type": "string"
+          },
+          "insertedOnUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastUpdatedUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isLocked": {
+            "type": "boolean"
+          },
+          "freezeOnSourceChanges": {
+            "type": "boolean"
+          },
+          "sourceUpdateAvailable": {
+            "type": "boolean"
+          },
+          "sourceUpdateAvailableSinceUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "refreshedFromSourceOnUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "frozenOnUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "geometry": { },
+          "belongsToJamforelseobjekt": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CompLineageRef"
+            }
+          },
+          "tags": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CompDatumEnumValue": {
+        "required": [
+          "value",
+          "name",
+          "enumType"
+        ],
+        "type": "object",
+        "properties": {
+          "value": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "name": {
+            "type": "string"
+          },
+          "enumType": {
+            "type": "string"
+          }
+        }
+      },
+      "CompDatumResponse": {
+        "required": [
+          "sedisId",
+          "parameterCode",
+          "valueDate"
+        ],
+        "type": "object",
+        "properties": {
+          "sedisId": {
+            "type": "string"
+          },
+          "parameterCode": {
+            "type": "string"
+          },
+          "valueDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "dataType": {
+            "type": "string"
+          },
+          "figure": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "boolean": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "enum": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CompDatumEnumValue"
+              }
+            ]
+          },
+          "date": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          }
+        }
+      },
+      "CompEpcEnvironmentalRating": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "type": "integer",
+        "description": "EPC environmental rating (EE0 — Miljöklassning). The integer carried by a CompDatum value's `enum.value` for parameter code EE0. Values: 0 = None; 1 = A; 2 = B; 3 = C; 4 = D; 5 = E; 6 = F. The live domain is also discoverable at runtime via `/v2/fastighetsbenchmark/parameters/EE0` (`enumValues`).",
+        "format": "int32"
+      },
+      "CompLineageRef": {
+        "required": [
+          "sedisId"
+        ],
+        "type": "object",
+        "properties": {
+          "sedisId": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CompParameterEnumValue": {
+        "required": [
+          "value",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "value": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "CompParameterResponse": {
+        "required": [
+          "code",
+          "name",
+          "groupName"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "groupName": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "unit": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isBaseData": {
+            "type": "boolean"
+          },
+          "dataType": {
+            "type": "string"
+          },
+          "enumValues": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CompParameterEnumValue"
+            }
+          }
+        }
+      },
+      "CompSustainabilityCertification": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16
+        ],
+        "type": "integer",
+        "description": "Sustainability certification (EH0). The integer carried by a CompDatum value's `enum.value` for parameter code EH0. Values: 0 = None; 1 = Other; 2 = ActiveHouse; 3 = BREEAM; 4 = Byggvarubedomningen; 5 = CEEB; 6 = DGNB; 7 = FEBY; 8 = GreenBuilding; 9 = LEED; 10 = Miljobyggnad; 11 = NollCO2; 12 = Passivhus; 13 = RESET; 14 = SundaHus; 15 = Svanen; 16 = WELL. The live domain is also discoverable at runtime via `/v2/fastighetsbenchmark/parameters/EH0` (`enumValues`).",
+        "format": "int32"
+      },
+      "CompTransactionKind": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "description": "Transaction kind (EC0 — Förvärv/Avyttring). The integer carried by a CompDatum value's `enum.value` for parameter code EC0. Values: 0 = None; 1 = Acquisition; 2 = Disposal. The live domain is also discoverable at runtime via `/v2/fastighetsbenchmark/parameters/EC0` (`enumValues`).",
+        "format": "int32"
+      },
+      "CompTransactionType": {
+        "enum": [
+          0,
+          1,
+          2
+        ],
+        "type": "integer",
+        "description": "Transaction type (ED0). The integer carried by a CompDatum value's `enum.value` for parameter code ED0. Values: 0 = None; 1 = Company; 2 = RealEstate. The live domain is also discoverable at runtime via `/v2/fastighetsbenchmark/parameters/ED0` (`enumValues`).",
+        "format": "int32"
+      },
+      "CompUploadIngestResult": {
+        "required": [
+          "status",
+          "compUploadId",
+          "uploadStatus",
+          "rowCount",
+          "messages"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/PartnerApiV2IngestionStatus"
+          },
+          "compUploadId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "uploadStatus": {
+            "type": "string"
+          },
+          "rowCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CompUploadRequest": {
+        "required": [
+          "valueDate",
+          "rows"
+        ],
+        "type": "object",
+        "properties": {
+          "valueDate": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date"
+          },
+          "submit": {
+            "type": "boolean"
+          },
+          "rows": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompUploadRowRequest"
+            }
+          }
+        }
+      },
+      "CompUploadRowRequest": {
+        "type": "object",
+        "properties": {
+          "sedisId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "internalDesignation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "officialDesignation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "streetNameAndNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "postalCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "postalAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "municipalityId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "parameterValues": {
+            "type": "object",
+            "additionalProperties": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+              "type": [
+                "null",
+                "number",
+                "string"
+              ],
+              "format": "double"
+            }
+          },
+          "tagValues": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "CompValuationAgency": {
+        "enum": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21
+        ],
+        "type": "integer",
+        "description": "Valuation agency (EG0 — Värderingsbolag). The integer carried by a CompDatum value's `enum.value` for parameter code EG0. Values: 0 = None; 1 = OvrigOkand; 2 = AcFastighetskonsult; 3 = CbreGroup; 4 = ColliersInternationalGroup; 5 = CroisetteRealEstatePartner; 6 = CushmanAndWakefield; 7 = Etableringspartner; 8 = ForumFastighetsekonomi; 9 = KommersiellaFastigheter; 10 = LocusAdviceFastighetskonsulter; 11 = Newsec; 12 = Novier; 13 = Realtum; 14 = Savills; 15 = Svefa; 16 = SverigesFastighetskonsult; 17 = SvenskFastighetsformedling; 18 = Tribau; 19 = Varderingsinstitutet; 20 = WideKonsulter; 21 = WinnaFastighet. The live domain is also discoverable at runtime via `/v2/fastighetsbenchmark/parameters/EG0` (`enumValues`).",
+        "format": "int32"
+      },
+      "CompValuationMethod": {
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "type": "integer",
+        "description": "Valuation method (EF0 — Typ av värdering). The integer carried by a CompDatum value's `enum.value` for parameter code EF0. Values: 0 = None; 1 = Internal; 2 = External; 3 = Coordinated. The live domain is also discoverable at runtime via `/v2/fastighetsbenchmark/parameters/EF0` (`enumValues`).",
+        "format": "int32"
+      },
+      "CreateSamlingRequest": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "maxLength": 255,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "containingCompSedisIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "DatumResponse": {
+        "required": [
+          "companyId",
+          "parameterCode",
+          "quarterId",
+          "lastUpdatedUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "companyId": {
+            "type": "string"
+          },
+          "parameterCode": {
+            "type": "string"
+          },
+          "quarterId": {
+            "$ref": "#/components/schemas/QuarterId"
+          },
+          "figure": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "text": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastUpdatedUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "JsonElement": { },
+      "MunicipalityRef": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ParameterResponse": {
+        "required": [
+          "code",
+          "name",
+          "groupName",
+          "period"
+        ],
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "groupName": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "period": {
+            "type": "string"
+          }
+        }
+      },
+      "PartnerApiV2EnvelopeOfCompanyResponse": {
+        "required": [
+          "data",
+          "page",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompanyResponse"
+            },
+            "description": "The page of results. Item shape is the singular resource (D-31)."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The 1-indexed current page (D-11).",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The effective page size (after clamping; default 50, max 500 — D-11).",
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total matching rows; `null` when `?count=false` (D-12).",
+            "format": "int64"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total pages; `null` when `?count=false` (D-12).",
+            "format": "int32"
+          }
+        },
+        "description": "The bare PartnerAPI v2 list envelope (D-12; locked in 62-WIRE-VOCABULARY §B.3). Every v2 list\nresponse serializes exactly these five fields — no OData `@odata.context` artifact, no\ncustom wrapping. Serialized camelCase via the v2 base controller's `V2Json` options."
+      },
+      "PartnerApiV2EnvelopeOfCompCollectionResponse": {
+        "required": [
+          "data",
+          "page",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompCollectionResponse"
+            },
+            "description": "The page of results. Item shape is the singular resource (D-31)."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The 1-indexed current page (D-11).",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The effective page size (after clamping; default 50, max 500 — D-11).",
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total matching rows; `null` when `?count=false` (D-12).",
+            "format": "int64"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total pages; `null` when `?count=false` (D-12).",
+            "format": "int32"
+          }
+        },
+        "description": "The bare PartnerAPI v2 list envelope (D-12; locked in 62-WIRE-VOCABULARY §B.3). Every v2 list\nresponse serializes exactly these five fields — no OData `@odata.context` artifact, no\ncustom wrapping. Serialized camelCase via the v2 base controller's `V2Json` options."
+      },
+      "PartnerApiV2EnvelopeOfCompDatumResponse": {
+        "required": [
+          "data",
+          "page",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompDatumResponse"
+            },
+            "description": "The page of results. Item shape is the singular resource (D-31)."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The 1-indexed current page (D-11).",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The effective page size (after clamping; default 50, max 500 — D-11).",
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total matching rows; `null` when `?count=false` (D-12).",
+            "format": "int64"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total pages; `null` when `?count=false` (D-12).",
+            "format": "int32"
+          }
+        },
+        "description": "The bare PartnerAPI v2 list envelope (D-12; locked in 62-WIRE-VOCABULARY §B.3). Every v2 list\nresponse serializes exactly these five fields — no OData `@odata.context` artifact, no\ncustom wrapping. Serialized camelCase via the v2 base controller's `V2Json` options."
+      },
+      "PartnerApiV2EnvelopeOfCompParameterResponse": {
+        "required": [
+          "data",
+          "page",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompParameterResponse"
+            },
+            "description": "The page of results. Item shape is the singular resource (D-31)."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The 1-indexed current page (D-11).",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The effective page size (after clamping; default 50, max 500 — D-11).",
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total matching rows; `null` when `?count=false` (D-12).",
+            "format": "int64"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total pages; `null` when `?count=false` (D-12).",
+            "format": "int32"
+          }
+        },
+        "description": "The bare PartnerAPI v2 list envelope (D-12; locked in 62-WIRE-VOCABULARY §B.3). Every v2 list\nresponse serializes exactly these five fields — no OData `@odata.context` artifact, no\ncustom wrapping. Serialized camelCase via the v2 base controller's `V2Json` options."
+      },
+      "PartnerApiV2EnvelopeOfDatumResponse": {
+        "required": [
+          "data",
+          "page",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatumResponse"
+            },
+            "description": "The page of results. Item shape is the singular resource (D-31)."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The 1-indexed current page (D-11).",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The effective page size (after clamping; default 50, max 500 — D-11).",
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total matching rows; `null` when `?count=false` (D-12).",
+            "format": "int64"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total pages; `null` when `?count=false` (D-12).",
+            "format": "int32"
+          }
+        },
+        "description": "The bare PartnerAPI v2 list envelope (D-12; locked in 62-WIRE-VOCABULARY §B.3). Every v2 list\nresponse serializes exactly these five fields — no OData `@odata.context` artifact, no\ncustom wrapping. Serialized camelCase via the v2 base controller's `V2Json` options."
+      },
+      "PartnerApiV2EnvelopeOfParameterResponse": {
+        "required": [
+          "data",
+          "page",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ParameterResponse"
+            },
+            "description": "The page of results. Item shape is the singular resource (D-31)."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The 1-indexed current page (D-11).",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The effective page size (after clamping; default 50, max 500 — D-11).",
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total matching rows; `null` when `?count=false` (D-12).",
+            "format": "int64"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total pages; `null` when `?count=false` (D-12).",
+            "format": "int32"
+          }
+        },
+        "description": "The bare PartnerAPI v2 list envelope (D-12; locked in 62-WIRE-VOCABULARY §B.3). Every v2 list\nresponse serializes exactly these five fields — no OData `@odata.context` artifact, no\ncustom wrapping. Serialized camelCase via the v2 base controller's `V2Json` options."
+      },
+      "PartnerApiV2EnvelopeOfPropertyUnitResponse": {
+        "required": [
+          "data",
+          "page",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PropertyUnitResponse"
+            },
+            "description": "The page of results. Item shape is the singular resource (D-31)."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The 1-indexed current page (D-11).",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The effective page size (after clamping; default 50, max 500 — D-11).",
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total matching rows; `null` when `?count=false` (D-12).",
+            "format": "int64"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total pages; `null` when `?count=false` (D-12).",
+            "format": "int32"
+          }
+        },
+        "description": "The bare PartnerAPI v2 list envelope (D-12; locked in 62-WIRE-VOCABULARY §B.3). Every v2 list\nresponse serializes exactly these five fields — no OData `@odata.context` artifact, no\ncustom wrapping. Serialized camelCase via the v2 base controller's `V2Json` options."
+      },
+      "PartnerApiV2EnvelopeOfZoneResponse": {
+        "required": [
+          "data",
+          "page",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ZoneResponse"
+            },
+            "description": "The page of results. Item shape is the singular resource (D-31)."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The 1-indexed current page (D-11).",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The effective page size (after clamping; default 50, max 500 — D-11).",
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total matching rows; `null` when `?count=false` (D-12).",
+            "format": "int64"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total pages; `null` when `?count=false` (D-12).",
+            "format": "int32"
+          }
+        },
+        "description": "The bare PartnerAPI v2 list envelope (D-12; locked in 62-WIRE-VOCABULARY §B.3). Every v2 list\nresponse serializes exactly these five fields — no OData `@odata.context` artifact, no\ncustom wrapping. Serialized camelCase via the v2 base controller's `V2Json` options."
+      },
+      "PartnerApiV2IngestionStatus": {
+        "type": "integer"
+      },
+      "PartnerApiV2SearchRequest": {
+        "type": "object",
+        "properties": {
+          "geometry": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "A GeoJSON geometry object (Polygon / MultiPolygon / Point, SRID 4326). Mutually exclusive with string? PartnerApiV2SearchRequest.Wkt.",
+                "$ref": "#/components/schemas/JsonElement"
+              }
+            ]
+          },
+          "wkt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "A WKT geometry string (SRID 4326). Mutually exclusive with JsonElement? PartnerApiV2SearchRequest.Geometry."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The 1-indexed page (D-11); defaults applied by the controller.",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The page size (D-11); clamped to the max by the controller.",
+            "format": "int32"
+          },
+          "sort": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Whitelisted `field,-field` sort expression (D-14)."
+          },
+          "fields": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Flat sparse-fieldset list (D-13); recognizes `geometry` + `belongsToJamforelseobjekt` opt-ins."
+          },
+          "count": {
+            "type": "boolean",
+            "description": "Whether to compute the total count (false → bulk-sync opt-out, D-12)."
+          },
+          "sedisId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Exact-match on the Sedis natural key."
+          },
+          "sedisIdIn": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Multi-value `sedisId in:` match (D-15)."
+          },
+          "nameContains": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Case-insensitive substring match on the name."
+          },
+          "municipalityId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "property-units only: exact-match on the municipality id.",
+            "format": "int32"
+          },
+          "propertyType": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "property-units only: exact-match on the property-type id.",
+            "format": "int32"
+          },
+          "belongsToJamforelseobjektSedisId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "property-units only: the A6 reverse-lineage filter."
+          },
+          "isCloneOfSedisObjektSedisId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "jamforelseobjekt only: exact-match on the clone-target SedisObjekt SedisId."
+          }
+        },
+        "description": "The request body for the per-resource `POST /v2/fastighetsbenchmark/{resource}/search` escape hatch\n(D-36). Carries a complex geometry (GeoJSON geometry object OR a WKT string, SRID 4326) that would\nexceed practical URL length on the GET equivalent, plus the SAME query-shape (page/pageSize/sort/fields/\ncount) and named filters the GET supports — so the response envelope, item schema, camelCase and tenant\nisolation are identical. POST search sets `Cache-Control: no-store` and emits no ETag."
+      },
+      "PartnerApiV2StatusResponse": {
+        "required": [
+          "status",
+          "apiVersion",
+          "message"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "description": "A fixed liveness token."
+          },
+          "apiVersion": {
+            "type": "string",
+            "description": "The served API version."
+          },
+          "message": {
+            "type": "string",
+            "description": "A culture-localized human-readable message (English default; Swedish via ?lang=sv)."
+          }
+        },
+        "description": "The camelCase status response (sealed record; serialized via the v2 base controller's V2Json)."
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "PropertyTypeRef": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "PropertyUnitResponse": {
+        "required": [
+          "sedisId",
+          "name",
+          "sourceName",
+          "insertedOnUtc",
+          "lastUpdatedUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "officialDesignation": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "municipality": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MunicipalityRef"
+              }
+            ]
+          },
+          "postalAddress": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "postalCode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "streetNameAndNumber": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "propertyType": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PropertyTypeRef"
+              }
+            ]
+          },
+          "sedisId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sourceName": {
+            "type": "string"
+          },
+          "insertedOnUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastUpdatedUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isLocked": {
+            "type": "boolean"
+          },
+          "freezeOnSourceChanges": {
+            "type": "boolean"
+          },
+          "sourceUpdateAvailable": {
+            "type": "boolean"
+          },
+          "sourceUpdateAvailableSinceUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "refreshedFromSourceOnUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "frozenOnUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "geometry": { },
+          "belongsToJamforelseobjekt": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CompLineageRef"
+            }
+          },
+          "tags": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "QuarterId": { },
+      "UpdateSamlingRequest": {
+        "required": [
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "maxLength": 255,
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "containingCompSedisIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ValidationProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ZoneResponse": {
+        "required": [
+          "sedisId",
+          "name",
+          "sourceName",
+          "insertedOnUtc",
+          "lastUpdatedUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "containsPropertyUnits": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CompLineageRef"
+            }
+          },
+          "sedisId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "sourceName": {
+            "type": "string"
+          },
+          "insertedOnUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastUpdatedUtc": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isLocked": {
+            "type": "boolean"
+          },
+          "freezeOnSourceChanges": {
+            "type": "boolean"
+          },
+          "sourceUpdateAvailable": {
+            "type": "boolean"
+          },
+          "sourceUpdateAvailableSinceUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "refreshedFromSourceOnUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "frozenOnUtc": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "geometry": { },
+          "belongsToJamforelseobjekt": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CompLineageRef"
+            }
+          },
+          "tags": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "apiKey": {
+        "type": "apiKey",
+        "description": "API key issued per customer. Send it in the X-Api-Key request header.",
+        "name": "X-Api-Key",
+        "in": "header"
+      }
+    }
+  },
+  "security": [
+    {
+      "apiKey": [ ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "PartnerApiV2Status"
+    },
+    {
+      "name": "Fastighetsbenchmark"
+    },
+    {
+      "name": "Bolagsanalys"
+    }
+  ]
+}

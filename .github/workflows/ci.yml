@@ -1,0 +1,65 @@
+name: CI
+
+# Build + the full vitest suite on every PR and on pushes to the default branch.
+# The two security suites (cross-tenant 404 + API-key non-leakage) are the
+# publish-blocking / merge-blocking required status check — mark the `security`
+# job Required in branch protection once it has named itself on the first run.
+
+on:
+  pull_request:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Required status check (branch protection): the BLOCKING security suites must
+  # be green before any PR merges. Kept as its own job so it can be marked
+  # Required independently of the broader build job.
+  security:
+    name: security (cross-tenant 404 + key non-leakage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run build
+      - name: Run the two BLOCKING security suites
+        run: npx vitest run test/security
+        env:
+          # Live alpha/beta v2 secrets — never committed; the live-v2 suites
+          # activate from these, the sentinel key-leak case runs without them.
+          SEDIS_API_BASE_URL: ${{ secrets.SEDIS_API_BASE_URL }}
+          SEDIS_API_KEY_A: ${{ secrets.SEDIS_API_KEY_A }}
+          SEDIS_API_KEY_B: ${{ secrets.SEDIS_API_KEY_B }}
+          B_SEDIS_ID: ${{ secrets.B_SEDIS_ID }}
+          A_KNOWN_SEDIS_ID: ${{ secrets.A_KNOWN_SEDIS_ID }}
+
+  # Full suite (security + contract + smoke + errors) — the complete PR gate.
+  build:
+    name: build + full vitest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run build
+      - name: Run the full vitest suite
+        run: npx vitest run
+        env:
+          SEDIS_API_BASE_URL: ${{ secrets.SEDIS_API_BASE_URL }}
+          SEDIS_API_KEY_A: ${{ secrets.SEDIS_API_KEY_A }}
+          SEDIS_API_KEY_B: ${{ secrets.SEDIS_API_KEY_B }}
+          B_SEDIS_ID: ${{ secrets.B_SEDIS_ID }}
+          A_KNOWN_SEDIS_ID: ${{ secrets.A_KNOWN_SEDIS_ID }}

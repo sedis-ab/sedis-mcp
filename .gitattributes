@@ -1,0 +1,21 @@
+# Normalize line endings: the repo was authored on Windows but ships to a
+# cross-platform npm audience. Force LF in the repo and in checkouts.
+* text=auto eol=lf
+
+# Source & config — always LF.
+*.ts   text eol=lf
+*.js   text eol=lf
+*.json text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.md   text eol=lf
+
+# Binaries — never normalize or diff as text.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.woff  binary
+*.woff2 binary
+*.tgz  binary

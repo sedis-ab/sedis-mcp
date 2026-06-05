@@ -1,0 +1,35 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.sedis-ab/mcp",
+  "description": "Model Context Protocol server wrapping the Sedis PartnerAPI v2 (Bolagsanalys + Fastighetsbenchmark) as curated, read-only tools.",
+  "repository": {
+    "url": "https://github.com/sedis-ab/sedis-mcp",
+    "source": "github"
+  },
+  "version": "0.0.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@sedis/mcp",
+      "version": "0.0.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SEDIS_API_KEY",
+          "description": "Your Sedis PartnerAPI v2 key (sent only as the X-Api-Key header; never logged).",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "SEDIS_API_BASE_URL",
+          "description": "Override the PartnerAPI v2 base URL (defaults to https://api.sedis.se).",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

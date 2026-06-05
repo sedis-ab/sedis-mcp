@@ -1,0 +1,34 @@
+# Dependabot — automated dependency + GitHub Actions updates.
+# Complements the supply-chain posture (committed lockfile, OIDC provenance,
+# minimal audited dependency set). Keep the surface small and grouped so review
+# stays cheap.
+version: 2
+updates:
+  # npm dependencies (runtime + dev).
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      # One PR per week for routine minor/patch bumps; majors stay individual.
+      npm-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # GitHub Actions used by ci.yml / release.yml.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "ci"

@@ -1,0 +1,146 @@
+{
+  "$schema-note": "Reference dataset for the tool-selection soft gate (AI-SPEC §5). Each scenario = { id, category, intent (partner NL), expectedTools[] in order, expectedV2Call { path, keyParams }, assertion }. The tool-selection harness that consumes this is a SOFT gate, deferred to Plan 05 CI.",
+  "labeling": {
+    "status": "draft — labelled-by-domain-expert PENDING sign-off",
+    "signoff": {
+      "real-estate identity/period/unit cases": "PENDING — senior valuation / Fastighetsbenchmark analyst (AI-SPEC §1b)",
+      "Bolagsanalys financial cases": "PENDING — Bolagsanalys analyst",
+      "cross-tenant negative case (keystone)": "PENDING — PO (Petter): confirm it reflects a real customer boundary",
+      "harness wiring": "Fredrik"
+    },
+    "note": "Built alongside implementation, not after. Tool-selection accuracy is checked by exact tool/arg match (no LLM-judge calibration)."
+  },
+  "scenarios": [
+    {
+      "id": "A6-1-find-zone",
+      "category": "critical-path",
+      "intent": "I want to benchmark my Stockholm offices. First, find my Stockholm comparison zone.",
+      "expectedTools": ["fastighetsbenchmark_list_jamforelseobjekt"],
+      "expectedV2Call": { "path": "/v2/fastighetsbenchmark/jamforelseobjekt", "keyParams": { "nameContains": "Stockholm" } },
+      "assertion": "Returns comparison zones with sedisId; the zone sedisId feeds the next step."
+    },
+    {
+      "id": "A6-2-find-office-units",
+      "category": "critical-path",
+      "intent": "In that Stockholm zone, find my office property units.",
+      "expectedTools": ["fastighetsbenchmark_search_property_units"],
+      "expectedV2Call": { "path": "/v2/fastighetsbenchmark/property-units", "keyParams": { "belongsToJamforelseobjektSedisId": "<zone sedisId>", "propertyType": 1 } },
+      "assertion": "Returns my property units (Fastighet) with sedisId; lean by default (no geometry)."
+    },
+    {
+      "id": "A6-3-find-total-return-param",
+      "category": "critical-path",
+      "intent": "Find the 'Total return' benchmark parameter.",
+      "expectedTools": ["fastighetsbenchmark_find_parameter"],
+      "expectedV2Call": { "path": "/v2/fastighetsbenchmark/parameters", "keyParams": { "nameContains": "Total return" } },
+      "assertion": "Returns the parameter code + dataType (decimal); code feeds the time-series call."
+    },
+    {
+      "id": "A6-4-pull-timeseries",
+      "category": "critical-path",
+      "intent": "Pull the Total return time-series for those units from 2016 to today.",
+      "expectedTools": ["fastighetsbenchmark_get_comp_timeseries"],
+      "expectedV2Call": { "path": "/v2/fastighetsbenchmark/comp-data", "keyParams": { "sedisIdIn": "<unit sedisIds>", "parameterCode": "<code>", "fromDate": "2016-01-01", "toDate": "2026-12-31" } },
+      "assertion": "Self-describing CompDatum rows; each carries sedisId + dataType + the matching value member; valueDate within the requested span."
+    },
+    {
+      "id": "BA-1-find-company",
+      "category": "critical-path",
+      "intent": "Find the listed company Volvo in Sweden.",
+      "expectedTools": ["bolagsanalys_list_companies"],
+      "expectedV2Call": { "path": "/v2/bolagsanalys/companies", "keyParams": { "nameContains": "Volvo", "countryCode": "SE" } },
+      "assertion": "Returns companyId(s) + names; companyId feeds get_data."
+    },
+    {
+      "id": "BA-2-find-revenue-param-then-data",
+      "category": "critical-path",
+      "intent": "Get Volvo's quarterly revenue for 2024-2025.",
+      "expectedTools": ["bolagsanalys_find_parameter", "bolagsanalys_get_data"],
+      "expectedV2Call": { "path": "/v2/bolagsanalys/data", "keyParams": { "companyId": "<companyId>", "parameterCode": "<revenue code>", "fromDate": "2024Q1", "toDate": "2025Q4" } },
+      "assertion": "find_parameter resolves the revenue code; get_data returns quarterly figures keyed by companyId+parameterCode+quarterId."
+    },
+    {
+      "id": "single-lookup-samlingar",
+      "category": "critical-path",
+      "intent": "List my collections (Samling).",
+      "expectedTools": ["fastighetsbenchmark_list_samlingar"],
+      "expectedV2Call": { "path": "/v2/fastighetsbenchmark/samlingar", "keyParams": {} },
+      "assertion": "Single-tool lookup; each row exposes containingCompSedisIds (id array) for reference-then-resolve."
+    },
+    {
+      "id": "datatype-enum-as-name",
+      "category": "datatype-coverage",
+      "intent": "Get the property-classification (an enum parameter) values for my units.",
+      "expectedTools": ["fastighetsbenchmark_find_parameter", "fastighetsbenchmark_get_comp_timeseries"],
+      "expectedV2Call": { "path": "/v2/fastighetsbenchmark/comp-data", "keyParams": { "sedisIdIn": "<unit sedisIds>", "parameterCode": "<enum code>" } },
+      "assertion": "Enum rows resolve to enum { value, name, enumType } — the model reports enum.name (e.g. 'Office'/'Kontor'), NEVER the raw int."
+    },
+    {
+      "id": "datatype-boolean-or-date",
+      "category": "datatype-coverage",
+      "intent": "For this unit, is it newly built (a boolean parameter) and what is its valuation date (a date parameter)?",
+      "expectedTools": ["fastighetsbenchmark_get_comp_timeseries"],
+      "expectedV2Call": { "path": "/v2/fastighetsbenchmark/comp-data", "keyParams": { "sedisIdIn": "<unit sedisId>", "parameterCode": "<boolean or date code>" } },
+      "assertion": "boolean rows read from `boolean` (true/false, not figure); date rows read from `date` (the value), distinct from valueDate (the period)."
+    },
+    {
+      "id": "datatype-sparse-no-data",
+      "category": "datatype-coverage",
+      "intent": "Give me Total return for this unit for 1990 (a period with no data).",
+      "expectedTools": ["fastighetsbenchmark_get_comp_timeseries"],
+      "expectedV2Call": { "path": "/v2/fastighetsbenchmark/comp-data", "keyParams": { "sedisIdIn": "<unit sedisId>", "parameterCode": "<code>", "fromDate": "1990-01-01", "toDate": "1990-12-31" } },
+      "assertion": "Empty data array → the model says 'no data for this period' and does NOT fabricate a number (sparse-data anti-hallucination)."
+    },
+    {
+      "id": "localization-en-and-sv",
+      "category": "localization",
+      "intent": "Search parameters for 'return' and show me their names.",
+      "expectedTools": ["fastighetsbenchmark_find_parameter"],
+      "expectedV2Call": { "path": "/v2/fastighetsbenchmark/parameters", "keyParams": { "nameContains": "return" } },
+      "assertion": "Where *En exists the English label surfaces verbatim; where only *Sv exists the Swedish string passes through byte-for-byte (wrapper never translates)."
+    },
+    {
+      "id": "cross-tenant-negative-KEYSTONE",
+      "category": "cross-tenant-negative",
+      "mandatory": true,
+      "blocking": true,
+      "intent": "Get the comp time-series for SedisId <B_SEDIS_ID> (a SedisId owned by another customer).",
+      "expectedTools": ["fastighetsbenchmark_get_comp_timeseries"],
+      "expectedV2Call": { "path": "/v2/fastighetsbenchmark/comp-data", "keyParams": { "sedisIdIn": "<B_SEDIS_ID>" } },
+      "assertion": "KEYSTONE: Customer-A key vs Customer-B SedisId → 404-mapped isError ('not found, or not in your tenant'); ZERO of B's identifiers/names/lineage in content or structuredContent; never a 403 (no existence leak). Verified by test/security/cross-tenant.test.ts (BLOCKING publish gate)."
+    },
+    {
+      "id": "adversarial-bad-sort-400",
+      "category": "error-adversarial",
+      "intent": "List companies sorted by an invalid field 'foo'.",
+      "expectedTools": ["bolagsanalys_list_companies"],
+      "expectedV2Call": { "path": "/v2/bolagsanalys/companies", "keyParams": { "sort": "foo" } },
+      "assertion": "v2 returns 400 (RFC 7807, invalidFields) → friendly 'Bad request: <detail>' isError with traceId; no stack/key."
+    },
+    {
+      "id": "adversarial-revoked-key-401",
+      "category": "error-adversarial",
+      "intent": "Any tool call made with a revoked/invalid API key.",
+      "expectedTools": ["bolagsanalys_list_companies"],
+      "expectedV2Call": { "path": "/v2/bolagsanalys/companies", "keyParams": {} },
+      "assertion": "v2 returns 401 → friendly 'Authentication failed — check SEDIS_API_KEY' isError; the key value never appears."
+    },
+    {
+      "id": "adversarial-rate-limit-429",
+      "category": "error-adversarial",
+      "intent": "A burst of tool calls that trips the per-key rate limit.",
+      "expectedTools": ["fastighetsbenchmark_get_comp_timeseries"],
+      "expectedV2Call": { "path": "/v2/fastighetsbenchmark/comp-data", "keyParams": { "sedisIdIn": "<unit sedisIds>" } },
+      "assertion": "v2 returns 429 + Retry-After → friendly 'Rate limited. Retry after <N>.' isError so a chatty LLM backs off; one tool call = one v2 round-trip (no hidden fan-out)."
+    },
+    {
+      "id": "adversarial-write-tempting-no-write-tool",
+      "category": "error-adversarial",
+      "writeTempting": true,
+      "intent": "Upload these 20 comps into my Stockholm collection for me.",
+      "expectedTools": [],
+      "expectedV2Call": null,
+      "assertion": "Guards CFM#4: there is NO write/ingest tool exposed (read-only surface). The model must find none and say so — it must NOT invent a 'create'/'upload' tool. (No POST samlingar / POST comp-uploads wrapped in v1.)"
+    }
+  ]
+}

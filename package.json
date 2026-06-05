@@ -1,0 +1,60 @@
+{
+  "name": "@sedis/mcp",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server wrapping the Sedis PartnerAPI v2 (Bolagsanalys + Fastighetsbenchmark) as curated, read-only tools.",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "modelcontextprotocol",
+    "sedis",
+    "partnerapi",
+    "bolagsanalys",
+    "fastighetsbenchmark",
+    "real-estate",
+    "financial-data",
+    "llm-tools"
+  ],
+  "author": "Sedis AB",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sedis-ab/sedis-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sedis-ab/sedis-mcp/issues"
+  },
+  "homepage": "https://github.com/sedis-ab/sedis-mcp#readme",
+  "type": "module",
+  "bin": {
+    "sedis": "build/index.js"
+  },
+  "files": [
+    "build"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "mcpName": "io.github.sedis-ab/mcp",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "snapshot:openapi": "curl -fsS https://beta.sedis.se/openapi/v2.json -o test/fixtures/openapi-v2.snapshot.json",
+    "changeset": "changeset",
+    "release": "changeset publish"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.27.11",
+    "@types/node": "^22.19.19",
+    "tsx": "^4.22.4",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

@@ -1,0 +1,78 @@
+name: Release
+
+# Tag-triggered release: BLOCKING security+contract+smoke gate → npm publish via
+# OIDC trusted publishing (auto-provenance; no steady-state npm auth token, no
+# explicit provenance flag) → mcp-publisher (metadata-only MCP registry) →
+# changesets GitHub Release.
+#
+# Trusted publisher (configured once on npmjs.com → @sedis/mcp →
+# Settings → Trusted Publisher → GitHub Actions):
+#   Organization: sedis-ab   Repository: sedis-mcp   Workflow: release.yml
+# Bootstrap first publish is a one-time manual step (Pattern 2) — see CONTRIBUTING.md.
+#
+# Runner floors for OIDC trusted publishing: Node >= 22.14.0, npm >= 11.5.1.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  id-token: write # REQUIRED: mints the OIDC token npm + the MCP registry trust
+  contents: write # changesets needs this to cut the GitHub Release
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: publish (npm OIDC + MCP registry) + GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22" # >= 22.14.0 for OIDC trusted publishing
+          registry-url: "https://registry.npmjs.org" # MANDATORY for trusted publishing
+
+      - run: npm ci
+      - run: npm run build
+
+      # BLOCKING gate — the two security suites + contract + smoke MUST pass
+      # before any publish step runs. A cross-tenant leak or a key leak stops
+      # the release here.
+      - name: BLOCKING security + contract + smoke gate
+        run: npx vitest run test/security test/contract test/smoke
+        env:
+          SEDIS_API_BASE_URL: ${{ secrets.SEDIS_API_BASE_URL }}
+          SEDIS_API_KEY_A: ${{ secrets.SEDIS_API_KEY_A }}
+          SEDIS_API_KEY_B: ${{ secrets.SEDIS_API_KEY_B }}
+          B_SEDIS_ID: ${{ secrets.B_SEDIS_ID }}
+          A_KNOWN_SEDIS_ID: ${{ secrets.A_KNOWN_SEDIS_ID }}
+
+      # npm publish via OIDC trusted publishing.
+      # No npm auth token in env, no explicit provenance flag: provenance is
+      # auto-generated under OIDC; access:public comes from publishConfig.
+      - name: Publish to npm (OIDC trusted publishing → auto-provenance)
+        run: npm publish
+
+      # MCP registry (metadata only) — runs after the npm package exists.
+      - name: Fetch mcp-publisher CLI
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+      - name: Log in to the MCP registry via GitHub OIDC (no secret)
+        run: ./mcp-publisher login github-oidc
+      - name: Publish server.json to the MCP registry
+        run: ./mcp-publisher publish
+
+      # changesets — cut the GitHub Release for this tag from the accumulated
+      # changeset entries (version bump + CHANGELOG already merged on main).
+      - name: Create the GitHub Release (changesets)
+        uses: changesets/action@v1
+        with:
+          createGithubReleases: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
