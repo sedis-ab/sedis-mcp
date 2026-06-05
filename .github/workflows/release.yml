@@ -29,11 +29,11 @@ jobs:
     name: publish (npm OIDC + MCP registry) + GitHub Release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: "22" # >= 22.14.0 for OIDC trusted publishing
           registry-url: "https://registry.npmjs.org" # MANDATORY for trusted publishing
