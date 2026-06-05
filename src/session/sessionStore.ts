@@ -36,6 +36,15 @@ export const SESSION_CACHE_PATH = join(CACHE_DIR, "session.json");
 const OWNER_ONLY = 0o600;
 
 /**
+ * Owner-only DIRECTORY permission (POSIX): rwx for the owner. A directory needs
+ * the execute/search bit — `0o700`, NOT `0o600` — or its contents cannot be
+ * opened: a `0o600` dir yields `EACCES` when writing the cache file inside it on
+ * Linux (Windows ignores the bits, which is why it slipped through locally).
+ * Best-effort on Windows (D-02).
+ */
+const OWNER_ONLY_DIR = 0o700;
+
+/**
  * Read the cached session token, or `undefined` when there is no usable cache.
  *
  * Defensive by design: a missing file, a non-JSON body, or any read error all
@@ -60,17 +69,26 @@ export function getCachedSession(): string | undefined {
  * swallowed (D-02) — the write still happens. Never logs the token.
  */
 export function setCachedSession(token: string): void {
-  mkdirSync(CACHE_DIR, { recursive: true, mode: OWNER_ONLY });
-  writeFileSync(SESSION_CACHE_PATH, JSON.stringify({ token }), {
-    mode: OWNER_ONLY,
-  });
-  // writeFile's `mode` only applies when the file is CREATED; an existing file
-  // keeps its old perms. chmod explicitly so a re-write also tightens perms.
-  // Best-effort: Windows may reject/ignore POSIX bits — do not fail (D-02).
+  // Best-effort persistence (header contract): a failed cache write must NOT throw
+  // the tool handler — config.ts's in-memory setter still carries the token for the
+  // current run. The directory gets 0o700 (needs the search/execute bit; a 0o600
+  // dir can't be traversed on Linux), the file gets 0o600.
   try {
-    chmodSync(SESSION_CACHE_PATH, OWNER_ONLY);
+    mkdirSync(CACHE_DIR, { recursive: true, mode: OWNER_ONLY_DIR });
+    writeFileSync(SESSION_CACHE_PATH, JSON.stringify({ token }), {
+      mode: OWNER_ONLY,
+    });
+    // writeFile's `mode` only applies when the file is CREATED; an existing file
+    // keeps its old perms. chmod explicitly so a re-write also tightens perms.
+    // Best-effort: Windows may reject/ignore POSIX bits — do not fail (D-02).
+    try {
+      chmodSync(SESSION_CACHE_PATH, OWNER_ONLY);
+    } catch {
+      /* best-effort on platforms without POSIX perms (D-02) */
+    }
   } catch {
-    /* best-effort on platforms without POSIX perms (D-02) */
+    /* best-effort: a failed cache write must not throw (D-02) — the in-memory
+       setter carries the token for the current run */
   }
 }
 
