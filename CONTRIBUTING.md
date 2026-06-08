@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in `@sedis-ab/mcp`. This is a deliberately
+Thanks for your interest in `@sedis/mcp`. This is a deliberately
 small, **thin-wrapper** MCP server around the Sedis PartnerAPI v2. Contributions
 should keep it that way.
 

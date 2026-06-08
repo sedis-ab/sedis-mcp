@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report incorrect or unexpected behavior in an @sedis-ab/mcp tool
+about: Report incorrect or unexpected behavior in an @sedis/mcp tool
 title: "[bug] "
 labels: ["bug"]
 assignees: []
@@ -39,7 +39,7 @@ NEVER paste your SEDIS_API_KEY or any secret into this issue.
 
 ## Environment
 
-- `@sedis-ab/mcp` version:
+- `@sedis/mcp` version:
 - Node version (`node -v`):
 - `SEDIS_API_BASE_URL` (the base URL only — **never the key**):
 - OS:

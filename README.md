@@ -1,7 +1,7 @@
-# @sedis-ab/mcp
+# @sedis/mcp
 
 [![CI](https://github.com/sedis-ab/sedis-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/sedis-ab/sedis-mcp/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/@sedis-ab/mcp.svg)](https://www.npmjs.com/package/@sedis-ab/mcp)
+[![npm version](https://img.shields.io/npm/v/@sedis/mcp.svg)](https://www.npmjs.com/package/@sedis/mcp)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 [![Node.js >= 20](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](https://nodejs.org)
 
@@ -20,7 +20,7 @@ The server runs over stdio and is launched on demand via `npx` — no global
 install needed. The canonical launch command is:
 
 ```bash
-npx -y @sedis-ab/mcp
+npx -y @sedis/mcp
 ```
 
 Add it to your client's MCP config and set your PartnerAPI key:
@@ -30,7 +30,7 @@ Add it to your client's MCP config and set your PartnerAPI key:
   "mcpServers": {
     "sedis": {
       "command": "npx",
-      "args": ["-y", "@sedis-ab/mcp"],
+      "args": ["-y", "@sedis/mcp"],
       "env": {
         "SEDIS_API_KEY": "your-partnerapi-v2-key"
       }
@@ -98,7 +98,7 @@ for the built entrypoint and override the base URL:
 }
 ```
 
-This is a development convenience only — production users just use the `npx -y @sedis-ab/mcp`
+This is a development convenience only — production users just use the `npx -y @sedis/mcp`
 block above with a single `SEDIS_API_KEY`.
 
 ## Tools

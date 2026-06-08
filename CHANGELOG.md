@@ -1,4 +1,4 @@
-# @sedis-ab/mcp
+# @sedis/mcp
 
 ## 1.0.0
 

@@ -1,5 +1,5 @@
 {
-  "name": "@sedis-ab/mcp",
+  "name": "@sedis/mcp",
   "version": "1.0.0",
   "description": "Model Context Protocol server wrapping the Sedis PartnerAPI v2 (Bolagsanalys + Fastighetsbenchmark) as curated, read-only tools.",
   "keywords": [

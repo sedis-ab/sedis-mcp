@@ -3,7 +3,7 @@
 // The ONE child-process test (everything else uses the in-process driver). It spawns
 // the BUILT `build/index.js` as a real Node child over stdio and connects an SDK
 // `Client` via `StdioClientTransport`, then `listTools()` and asserts all 12 tools
-// register. This proves the real `npx -y @sedis-ab/mcp` path works end-to-end: the
+// register. This proves the real `npx -y @sedis/mcp` path works end-to-end: the
 // shebang + `type:module` + `.js` ESM import specifiers all resolve when Node runs
 // the bin (the failure mode an in-process import would mask).
 //

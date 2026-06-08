@@ -1,5 +1,5 @@
 <!--
-Thanks for contributing to @sedis-ab/mcp! Please keep PRs small and focused.
+Thanks for contributing to @sedis/mcp! Please keep PRs small and focused.
 See CONTRIBUTING.md for the full workflow.
 -->
 

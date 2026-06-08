@@ -11,7 +11,7 @@
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "@sedis-ab/mcp",
+      "identifier": "@sedis/mcp",
       "version": "0.0.0",
       "transport": {
         "type": "stdio"

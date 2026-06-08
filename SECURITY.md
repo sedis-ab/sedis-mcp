@@ -1,6 +1,6 @@
 # Security
 
-`@sedis-ab/mcp` is a **thin, inert wrapper** around the Sedis PartnerAPI
+`@sedis/mcp` is a **thin, inert wrapper** around the Sedis PartnerAPI
 v2. Understanding what it does — and deliberately does **not** do — is the core
 of its security posture.
 
@@ -49,7 +49,7 @@ that is enforced by PartnerAPI v2:
   on GitHub Actions — there is no long-lived npm token to steal in steady state.
   npm auto-generates a Sigstore-backed **provenance attestation** binding each
   published artifact to this public repo and the `release.yml` workflow. Verify
-  it with `npm view @sedis-ab/mcp` (look for the provenance attestation).
+  it with `npm view @sedis/mcp` (look for the provenance attestation).
 - **Public source.** The repository is public — a precondition for provenance to
   generate at all.
 - **Locked dependencies.** A committed `package-lock.json` pins the full

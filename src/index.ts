@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // index.ts — the npx entry point. The shebang above survives tsc into
-// build/index.js so `npx -y @sedis-ab/mcp` runs it directly (D-03 / D-14).
+// build/index.js so `npx -y @sedis/mcp` runs it directly (D-03 / D-14).
 //
 // CRITICAL: stdout is the JSON-RPC channel for the stdio transport. NEVER write to
 // stdout after connect() — any stray output desyncs the client. All diagnostics go
@@ -18,6 +18,6 @@ async function main(): Promise<void> {
 
 main().catch((err) => {
   // stderr only — never stdout.
-  console.error("Fatal error starting @sedis-ab/mcp:", err);
+  console.error("Fatal error starting @sedis/mcp:", err);
   process.exit(1);
 });
