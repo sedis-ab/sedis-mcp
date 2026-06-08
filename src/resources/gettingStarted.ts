@@ -50,7 +50,7 @@ on the first call). Names default to English; pass \`lang:"sv"\` for Swedish.
   "mcpServers": {
     "sedis": {
       "command": "npx",
-      "args": ["-y", "@sedis/mcp"],
+      "args": ["-y", "@sedis-ab/mcp"],
       "env": { "SEDIS_API_KEY": "your-partnerapi-v2-key" }
     }
   }

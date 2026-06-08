@@ -1,4 +1,4 @@
-// config.ts — environment contract for @sedis/mcp (D-09 / D-10).
+// config.ts — environment contract for @sedis-ab/mcp (D-09 / D-10).
 //
 // Two env values matter:
 //   SEDIS_API_KEY       (required) — the partner's PartnerAPI v2 key. Read lazily

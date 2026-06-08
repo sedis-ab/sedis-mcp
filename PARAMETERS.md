@@ -30,10 +30,10 @@ its first public repo, with the `@sedis` npm scope.
 ## NPM_SCOPE
 
 - **Placeholder token:** `PLACEHOLDER_SCOPE` (substituted)
-- **Confirmed value:** `sedis` (the `@sedis` npm scope → package `@sedis/mcp`)
+- **Confirmed value:** `sedis` (the `@sedis` npm scope → package `@sedis-ab/mcp`)
 - **Appears in:**
-  - `package.json` → `name` (`@sedis/mcp`)
-  - All install snippets / docs (`npx -y @sedis/mcp`)
+  - `package.json` → `name` (`@sedis-ab/mcp`)
+  - All install snippets / docs (`npx -y @sedis-ab/mcp`)
 - **Resolved by:** Plan 05, `@sedis` scope reserved on npmjs.com.
 
 ## REGISTRY_NAMESPACE
@@ -58,7 +58,7 @@ its first public repo, with the `@sedis` npm scope.
 
 The real values were confirmed and the tokens replaced everywhere:
 
-- [x] `package.json` `name`: `@PLACEHOLDER_SCOPE/mcp` → `@sedis/mcp`
+- [x] `package.json` `name`: `@PLACEHOLDER_SCOPE/mcp` → `@sedis-ab/mcp`
 - [x] `package.json` `mcpName`: `io.github.PLACEHOLDER_ORG/sedis` → `io.github.sedis-ab/mcp`
 - [x] `server.json` `name`: matches the substituted `mcpName` (`io.github.sedis-ab/mcp`)
 - [x] `server.json` `repository.url` + package `identifier` substituted

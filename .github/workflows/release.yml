@@ -5,7 +5,7 @@ name: Release
 # explicit provenance flag) → mcp-publisher (metadata-only MCP registry) →
 # changesets GitHub Release.
 #
-# Trusted publisher (configured once on npmjs.com → @sedis/mcp →
+# Trusted publisher (configured once on npmjs.com → @sedis-ab/mcp →
 # Settings → Trusted Publisher → GitHub Actions):
 #   Organization: sedis-ab   Repository: sedis-mcp   Workflow: release.yml
 # Bootstrap first publish is a one-time manual step (Pattern 2) — see CONTRIBUTING.md.

@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest a new tool, argument, or improvement for @sedis/mcp
+about: Suggest a new tool, argument, or improvement for @sedis-ab/mcp
 title: "[feature] "
 labels: ["enhancement"]
 assignees: []

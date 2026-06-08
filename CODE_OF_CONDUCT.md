@@ -3,7 +3,7 @@
 ## Our pledge
 
 We as members, contributors, and maintainers pledge to make participation in the
-`@sedis/mcp` project a harassment-free, welcoming, and inclusive experience for
+`@sedis-ab/mcp` project a harassment-free, welcoming, and inclusive experience for
 everyone, regardless of background or identity. We pledge to act and interact in
 ways that contribute to an open, respectful, and healthy community.
 
