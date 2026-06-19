@@ -29,7 +29,7 @@ jobs:
     name: publish (npm OIDC + MCP registry) + GitHub Release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
