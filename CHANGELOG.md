@@ -1,5 +1,11 @@
 # @sedis/mcp
 
+## 1.1.1
+
+### Patch Changes
+
+- Fix the release pipeline so publishing actually completes end-to-end: upgrade npm to >=11.5.1 on the CI runner (Node 22 ships npm 10.x, which can't do tokenless OIDC trusted publishing and 404'd on the publish PUT), and shorten the `server.json` description to <=100 characters (the MCP registry's hard cap, which was rejecting the registry listing with a 422). No runtime or API changes.
+
 ## 1.1.0
 
 ### Minor Changes
