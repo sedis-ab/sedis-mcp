@@ -89,7 +89,14 @@ jobs:
       # must NEVER block the npm publish, the GitHub Release, or the .mcpb asset (which
       # all run after it). A registry hiccup should not fail the release.
       - name: Publish server.json to the MCP registry
-        run: ./mcp-publisher publish
+        run: |
+          for i in 1 2 3 4; do
+            ./mcp-publisher publish && exit 0
+            echo "registry publish attempt $i failed (the just-published npm version may still be propagating); retrying in 20s..."
+            sleep 20
+          done
+          echo "MCP registry publish did not succeed after retries — non-fatal; it will catch up on the next release."
+          exit 1
         continue-on-error: true
 
       # changesets — cut the GitHub Release for this tag from the accumulated
