@@ -99,14 +99,16 @@ jobs:
           exit 1
         continue-on-error: true
 
-      # changesets — cut the GitHub Release for this tag from the accumulated
-      # changeset entries (version bump + CHANGELOG already merged on main).
-      - name: Create the GitHub Release (changesets)
-        uses: changesets/action@v1
-        with:
-          createGithubReleases: true
+      # Create the GitHub Release for this tag (idempotent: edit if it already
+      # exists). NOTE: the prior changesets/action createGithubReleases mode was a
+      # silent no-op here, because this workflow runs `npm publish` directly rather
+      # than `changeset publish` — so releases never got created. This makes it real.
+      - name: Create the GitHub Release
+        run: |
+          gh release create "${{ github.ref_name }}" --title "Sedis MCP ${{ github.ref_name }}" --generate-notes --latest \
+            || gh release edit "${{ github.ref_name }}" --latest
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Attach the one-click Claude Desktop bundle to the release for this tag so
       # non-technical users can download a single file. Best-effort: if the
