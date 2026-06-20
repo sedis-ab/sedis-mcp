@@ -16,6 +16,24 @@ PartnerAPI v2, not here.
 
 ## Install
 
+### Easiest: one-click Claude Desktop bundle (`.mcpb`) — recommended
+
+For non-technical users, install the **Desktop Extension** — a single file, no
+Node, no JSON, no terminal:
+
+1. Download **`sedis-mcp.mcpb`** from the [latest release](https://github.com/sedis-ab/sedis-mcp/releases/latest).
+2. **Double-click it** (or open Claude Desktop → **Settings → Extensions** and drag it in) and click **Install**.
+3. Paste your **Sedis API key** into the field that appears (stored in your OS keychain) and confirm.
+4. Done — start a chat and ask, e.g. _"Visa nyckeltal för Fabege"_ (`lang: "sv"` for Swedish).
+
+> The bundle packages the exact server described below together with its
+> dependencies; Claude Desktop supplies the Node runtime, so the user installs
+> nothing else. Ask your Sedis administrator for a key — a **customer-level (M2M)
+> key** needs no per-session two-factor step. Maintainers build the bundle with
+> `npm run build:mcpb` (output: `dist/sedis-mcp.mcpb`).
+
+### Manual config (any MCP client — Claude Code, Cursor, …)
+
 The server runs over stdio and is launched on demand via `npx` — no global
 install needed. The canonical launch command is:
 

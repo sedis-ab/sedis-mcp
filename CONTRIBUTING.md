@@ -24,7 +24,15 @@ should keep it that way.
 npm ci
 npm run build      # tsc -> build/
 npm test           # full vitest suite
+npm run build:mcpb # -> dist/sedis-mcp.mcpb (Claude Desktop one-click bundle)
 ```
+
+`build:mcpb` esbuild-bundles the same server into one self-contained ESM file,
+stages `manifest.json` (+ a minimal `package.json` so the runtime version lookup
+in `src/server.ts` resolves), validates against the MCPB schema, and packs the
+`.mcpb`. Edit packaging/identity in `manifest.json`; the build logic lives in
+`scripts/build-mcpb.mjs`. No native deps, so the single bundle runs anywhere
+Claude Desktop's Node does.
 
 The live-v2 test suites (`runIf`-guarded) skip cleanly without secrets; the
 sentinel key-leak case and the RFC 7807 error-mapping unit tests run locally with
@@ -51,7 +59,9 @@ Versioning, the changelog, and the GitHub Release are driven by
 3. Pushing a `v*` tag triggers `.github/workflows/release.yml`, which runs the
    BLOCKING security + contract + smoke gate, then publishes to npm via **OIDC
    trusted publishing** (auto-provenance, no token), then lists the metadata on
-   the MCP registry via `mcp-publisher`, then cuts the GitHub Release.
+   the MCP registry via `mcp-publisher`, builds the **`.mcpb`** bundle and
+   attaches it to the GitHub Release (also kept as a workflow artifact), then
+   cuts the GitHub Release.
 
 ### First-ever publish (bootstrap, one-time)
 

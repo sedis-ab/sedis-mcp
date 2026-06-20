@@ -41,6 +41,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "build:mcpb": "node scripts/build-mcpb.mjs",
     "test": "vitest run",
     "snapshot:openapi": "curl -fsS https://beta.sedis.se/openapi/v2.json -o test/fixtures/openapi-v2.snapshot.json",
     "changeset": "changeset",
@@ -51,8 +52,10 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@anthropic-ai/mcpb": "^2.1.2",
     "@changesets/cli": "^2.27.11",
     "@types/node": "^25.9.1",
+    "esbuild": "^0.28.1",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"

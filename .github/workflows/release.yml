@@ -53,6 +53,12 @@ jobs:
           B_SEDIS_ID: ${{ secrets.B_SEDIS_ID }}
           A_KNOWN_SEDIS_ID: ${{ secrets.A_KNOWN_SEDIS_ID }}
 
+      # Build the Claude Desktop one-click bundle (.mcpb). Independent of the npm
+      # publish; only runs once the BLOCKING gate above is green. esbuild +
+      # @anthropic-ai/mcpb come from `npm ci` (devDependencies).
+      - name: Build the Claude Desktop bundle (.mcpb)
+        run: npm run build:mcpb
+
       # npm publish via OIDC trusted publishing.
       # No npm auth token in env, no explicit provenance flag: provenance is
       # auto-generated under OIDC; access:public comes from publishConfig.
@@ -76,3 +82,20 @@ jobs:
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Attach the one-click Claude Desktop bundle to the release for this tag so
+      # non-technical users can download a single file. Best-effort: if the
+      # release name differs from the tag it won't fail the publish (the .mcpb is
+      # also kept as a workflow artifact below).
+      - name: Attach the .mcpb to the GitHub Release
+        run: gh release upload "${{ github.ref_name }}" dist/sedis-mcp.mcpb --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Upload the .mcpb as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sedis-mcp-mcpb
+          path: dist/sedis-mcp.mcpb
+          if-no-files-found: error
