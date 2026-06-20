@@ -77,8 +77,20 @@ jobs:
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
       - name: Log in to the MCP registry via GitHub OIDC (no secret)
         run: ./mcp-publisher login github-oidc
+      # Stamp the real published version into server.json — its committed value is a
+      # 0.0.0 placeholder, and the registry validates @sedis/mcp@<version> against npm
+      # (404s on 0.0.0). Keep the placeholder in source; substitute at publish time.
+      - name: Stamp the release version into server.json
+        run: |
+          V=$(node -p "require('./package.json').version")
+          node -e "const fs=require('fs'),s=require('./server.json');s.version=process.argv[1];s.packages[0].version=process.argv[1];fs.writeFileSync('server.json',JSON.stringify(s,null,2)+'\n')" "$V"
+          echo "server.json stamped to $V"
+      # continue-on-error: the registry listing is metadata-only discoverability — it
+      # must NEVER block the npm publish, the GitHub Release, or the .mcpb asset (which
+      # all run after it). A registry hiccup should not fail the release.
       - name: Publish server.json to the MCP registry
         run: ./mcp-publisher publish
+        continue-on-error: true
 
       # changesets — cut the GitHub Release for this tag from the accumulated
       # changeset entries (version bump + CHANGELOG already merged on main).
