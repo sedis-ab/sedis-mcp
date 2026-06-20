@@ -1,5 +1,11 @@
 # @sedis/mcp
 
+## 1.1.2
+
+### Patch Changes
+
+- Make the MCP registry publish resilient to npm propagation lag (retry with backoff), completing the registry listing. No runtime or API changes.
+
 ## 1.1.1
 
 ### Patch Changes
