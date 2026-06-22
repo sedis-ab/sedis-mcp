@@ -54,8 +54,21 @@ Versioning, the changelog, and the GitHub Release are driven by
    npx changeset
    ```
    Commit the generated `.changeset/*.md` file alongside your change.
-2. Merging the accumulated changesets bumps the version and updates
-   `CHANGELOG.md`.
+2. Apply the accumulated changesets — this is the one command that bumps every
+   version-bearing file in lockstep:
+   ```bash
+   npm run version-packages   # = changeset version  +  node scripts/sync-version.mjs
+   ```
+   `changeset version` bumps `package.json` and rewrites `CHANGELOG.md`;
+   `sync-version.mjs` then stamps the **same** version into `manifest.json`
+   (the `.mcpb` version Claude Desktop reads for upgrade detection) and
+   `server.json` (the MCP registry descriptor). `package.json` is the single
+   source of truth — never hand-edit the version in the other two. Commit the
+   result, then tag:
+   ```bash
+   git commit -am "release: vX.Y.Z"
+   git tag vX.Y.Z && git push --follow-tags
+   ```
 3. Pushing a `v*` tag triggers `.github/workflows/release.yml`, which runs the
    BLOCKING security + contract + smoke gate, then publishes to npm via **OIDC
    trusted publishing** (auto-provenance, no token), then lists the metadata on

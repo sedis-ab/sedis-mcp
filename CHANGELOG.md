@@ -1,5 +1,11 @@
 # @sedis/mcp
 
+## 1.1.3
+
+### Patch Changes
+
+- Surface the real transport error when a tool call can't reach the Sedis API, instead of the opaque "Unexpected error contacting Sedis." The underlying Node error code (e.g. `ECONNREFUSED`, `ENOTFOUND`, a TLS code, or `fetch is not defined`) is now both logged to stderr — so it lands in the client's MCP server log — and included in the returned message, which also clarifies that a connection failure is a host/network/firewall issue, not an API-key problem. Shared `describeToolError` helper replaces the duplicated catch logic in the Bolagsanalys and Fastighetsbenchmark tools. No API, data, or auth change.
+
 ## 1.1.2
 
 ### Patch Changes

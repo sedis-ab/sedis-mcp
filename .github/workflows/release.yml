@@ -77,9 +77,13 @@ jobs:
           curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
       - name: Log in to the MCP registry via GitHub OIDC (no secret)
         run: ./mcp-publisher login github-oidc
-      # Stamp the real published version into server.json — its committed value is a
-      # 0.0.0 placeholder, and the registry validates @sedis/mcp@<version> against npm
-      # (404s on 0.0.0). Keep the placeholder in source; substitute at publish time.
+      # Stamp the published version into server.json. It is normally ALREADY in
+      # lockstep — scripts/sync-version.mjs stamps it (and manifest.json) from
+      # package.json at `npm run version-packages` time, package.json being the
+      # single source of truth. This step is a belt-and-suspenders guarantee: the
+      # registry validates @sedis/mcp@<version> against npm, so a stale/forgotten
+      # value would 404. Re-deriving from package.json here makes the listing
+      # version-correct unconditionally.
       - name: Stamp the release version into server.json
         run: |
           V=$(node -p "require('./package.json').version")

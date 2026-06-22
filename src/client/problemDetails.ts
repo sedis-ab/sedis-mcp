@@ -30,6 +30,46 @@ export class ToolError extends Error {
   }
 }
 
+/**
+ * Turn ANY caught error into a friendly, key-free message for a CallToolResult.
+ *
+ * A {@link ToolError} (our own expected/mapped errors — auth, 404, rate-limit, etc.)
+ * passes its message through verbatim. Anything else is an UNEXPECTED failure — almost
+ * always a transport error from the single `fetch` in v2Client: a per-app/host firewall
+ * or VPN blocking the MCP host's node process, no outbound internet, a DNS/TLS failure,
+ * or a runtime without a global `fetch`. The old generic "Unexpected error contacting
+ * Sedis." swallowed the one fact that makes these diagnosable — the underlying Node
+ * error code — so a partner saw only "could not connect" with nothing to act on.
+ *
+ * We now (a) log the raw error to stderr (lands in the client's MCP server log) and
+ * (b) surface the specific code (ECONNREFUSED, ENOTFOUND, a TLS code, or "fetch is not
+ * defined") in the returned message — while still never leaking the key or a stack trace.
+ */
+export function describeToolError(e: unknown): string {
+  if (e instanceof ToolError) return e.message;
+
+  // Unexpected: log the full error for the operator (stderr is separate from the
+  // stdio JSON-RPC channel, so this can't corrupt the protocol).
+  console.error("[sedis] unexpected tool error:", e);
+
+  // Node's fetch rejects with a TypeError whose `.cause` carries the real transport
+  // error (code on `.cause.code`); other failures (e.g. a missing global `fetch`) put
+  // the signal on the top-level error. Probe both, prefer the most specific.
+  const err = e as {
+    message?: string;
+    code?: string;
+    cause?: { code?: string; message?: string };
+  };
+  const detail =
+    err?.cause?.code ?? err?.code ?? err?.cause?.message ?? err?.message ?? "unknown error";
+
+  return (
+    `Could not reach the Sedis API (${detail}). This is a connection error from the ` +
+    "MCP host (network / firewall / VPN), not an API rejection — your API key was not " +
+    "the problem."
+  );
+}
+
 /** Minimal shape of the RFC 7807 body we read (everything is optional/defensive). */
 interface ProblemBody {
   detail?: string;

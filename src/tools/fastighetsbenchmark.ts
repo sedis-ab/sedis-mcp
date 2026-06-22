@@ -26,7 +26,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { callV2 } from "../client/v2Client.js";
-import { ToolError } from "../client/problemDetails.js";
+import { describeToolError } from "../client/problemDetails.js";
 import {
   findParameterInput,
   findParameterOutput,
@@ -62,9 +62,7 @@ async function runTool(
       structuredContent: out as Record<string, unknown>,
     };
   } catch (e) {
-    const msg =
-      e instanceof ToolError ? e.message : "Unexpected error contacting Sedis.";
-    return { content: [{ type: "text", text: msg }], isError: true };
+    return { content: [{ type: "text", text: describeToolError(e) }], isError: true };
   }
 }
 
