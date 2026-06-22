@@ -60,6 +60,20 @@ export function describeToolError(e: unknown): string {
     code?: string;
     cause?: { code?: string; message?: string };
   };
+
+  // A header-value encoding failure (a non-Latin-1 char in a request header) is a
+  // client-side input problem, NOT transport — most often a "…" (U+2026) from a
+  // truncated key/token paste, which makes fetch throw while building the request.
+  // v2Client validates the key + session up front, but catch any that slips through
+  // here so it is never misreported as a network/firewall error.
+  if (String(err?.message ?? "").includes("ByteString")) {
+    return (
+      "A request header contains an invalid (non-Latin-1) character — usually a '…' " +
+      "from a truncated API-key or session-token paste. Re-copy the full value into " +
+      "your MCP client's config."
+    );
+  }
+
   const detail =
     err?.cause?.code ?? err?.code ?? err?.cause?.message ?? err?.message ?? "unknown error";
 
@@ -123,7 +137,10 @@ export function mapProblem(status: number, p: ProblemBody, headers: Headers): To
             `step, then retry.${tail}`,
         );
       }
-      return new ToolError(`Authentication failed — check SEDIS_API_KEY.${tail}`);
+      return new ToolError(
+        "Authentication failed — your SEDIS_API_KEY is invalid, revoked, or expired. " +
+          `Check the key (it is shown only once at creation, so a lost key must be regenerated).${tail}`,
+      );
     }
     case 403:
       // Product-entitlement 403 (D-15 / ENTITLE-04): authenticated, but the key is

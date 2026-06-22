@@ -47,6 +47,7 @@ describe("RFC 7807 → friendly ToolError mapping (D-11)", () => {
     await handle?.close();
     handle = undefined;
     fetchSpy?.mockRestore();
+    delete process.env.SEDIS_API_SESSION; // a test may seed it; don't leak across tests
   });
 
   function stubStatus(status: number, detail: string, headers: Record<string, string> = {}): void {
@@ -65,11 +66,12 @@ describe("RFC 7807 → friendly ToolError mapping (D-11)", () => {
     return { isError: res.isError === true, text: JSON.stringify(res) };
   }
 
-  it("401 → friendly 'check SEDIS_API_KEY', isError, with traceId, no key/stack", async () => {
+  it("401 → friendly invalid/revoked/expired key message, isError, with traceId, no key/stack", async () => {
     stubStatus(401, "Missing or invalid X-Api-Key.");
     const { isError, text } = await callOnce();
     expect(isError).toBe(true);
-    expect(text).toMatch(/check SEDIS_API_KEY/i);
+    expect(text).toMatch(/SEDIS_API_KEY/);
+    expect(text).toMatch(/invalid, revoked, or expired/i);
     expect(text).toContain(TRACE);
     expect(text).not.toContain(SENTINEL);
     expect(text).not.toMatch(/at .*\.ts:\d+|node:internal|\bstack\b/i);
@@ -93,7 +95,7 @@ describe("RFC 7807 → friendly ToolError mapping (D-11)", () => {
     expect(isError).toBe(true);
     expect(text).toMatch(/two-factor re-verification required/i);
     expect(text).toContain(reproveUrl); // the actionable URL is surfaced
-    expect(text).not.toMatch(/check SEDIS_API_KEY/i); // NOT the generic 401 message
+    expect(text).not.toMatch(/invalid, revoked, or expired/i); // NOT the generic 401 message
     expect(text).toContain(TRACE);
     expect(text).not.toContain(SENTINEL); // never leak the key
   });
@@ -117,7 +119,7 @@ describe("RFC 7807 → friendly ToolError mapping (D-11)", () => {
     expect(text).toContain(reproveUrl); // actionable URL
     expect(text).toMatch(/set_session/); // the paste flow
     expect(text).toMatch(/no client restart|no restart/i); // D-04
-    expect(text).not.toMatch(/check SEDIS_API_KEY/i); // NOT the generic 401 message
+    expect(text).not.toMatch(/invalid, revoked, or expired/i); // NOT the generic 401 message
     expect(text).toContain(TRACE);
     expect(text).not.toContain(SENTINEL); // never leak the key
   });
@@ -141,6 +143,32 @@ describe("RFC 7807 → friendly ToolError mapping (D-11)", () => {
     expect(text).not.toMatch(/check SEDIS_API_KEY/i);
     expect(text).toContain(TRACE);
     expect(text).not.toContain(SENTINEL);
+  });
+
+  it("API key with a non-Latin-1 char (truncated '…' paste) fails fast, before any fetch", async () => {
+    // The field-reported bug: a key copied from an abbreviated display carries a U+2026
+    // ellipsis, which makes fetch throw while building the X-Api-Key header. We validate
+    // up front and return an actionable message — never echoing the key — and never hit
+    // the network.
+    process.env.SEDIS_API_KEY = "sk_LEAKCHECK_" + "a".repeat(160) + "…";
+    fetchSpy = vi.spyOn(globalThis, "fetch"); // must NOT be called
+    const { isError, text } = await callOnce();
+    expect(isError).toBe(true);
+    expect(text).toMatch(/invalid character at position/i);
+    expect(text).toContain("8230"); // the offending code point (… = U+2026)
+    expect(text).not.toContain("LEAKCHECK"); // the key value is never echoed
+    expect(fetchSpy).not.toHaveBeenCalled(); // threw while building the request
+  });
+
+  it("session token with a non-Latin-1 char fails fast with a set_session hint", async () => {
+    process.env.SEDIS_API_KEY = SENTINEL; // valid key
+    process.env.SEDIS_API_SESSION = "sess_…truncated";
+    fetchSpy = vi.spyOn(globalThis, "fetch"); // must NOT be called
+    const { isError, text } = await callOnce();
+    expect(isError).toBe(true);
+    expect(text).toMatch(/session token contains an invalid character/i);
+    expect(text).toMatch(/set_session/);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("404 → 'not found, or not in your tenant' (never 403/existence leak), with traceId", async () => {

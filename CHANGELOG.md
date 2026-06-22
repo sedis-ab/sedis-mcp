@@ -1,5 +1,11 @@
 # @sedis/mcp
 
+## 1.1.4
+
+### Patch Changes
+
+- Fail fast with an actionable message when the API key or session token can't go into an HTTP header. A value copied from an abbreviated/displayed key carries a Unicode character — most often a `…` ellipsis (U+2026) from a truncated copy — and HTTP header values must be Latin-1, so `fetch` used to throw synchronously with an opaque error before any network I/O. The key and session token are now validated up front: a non-Latin-1 character is rejected with the exact position and a "re-copy the FULL key (shown only once — you may need to generate a new one)" / "re-prove 2FA and set_session" hint, without ever echoing the value. As a backstop, a header-encoding error that still reaches the catch-all is reported as a paste problem rather than a misleading "network/firewall" error. The 401 message now also names the invalid/revoked/expired-key case explicitly.
+
 ## 1.1.3
 
 ### Patch Changes
