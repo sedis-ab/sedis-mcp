@@ -81,7 +81,7 @@ describe("RFC 7807 → friendly ToolError mapping (D-11)", () => {
     // Phase-66 owner-2FA reproof gate: a user-owned key whose owner is outside the
     // reproof window returns 401 carrying extensions.reproveUrl. The wrapper must
     // surface that URL so the LLM tells the user to re-prove — not "check your key".
-    const reproveUrl = "https://beta.sedis.se/Identity/Account/Manage/ReproveApi";
+    const reproveUrl = "https://app.sedis.se/Identity/Account/Manage/ReproveApi";
     fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse(401, {
         type: "https://datatracker.ietf.org/doc/html/rfc7235#section-3.1",
@@ -104,7 +104,7 @@ describe("RFC 7807 → friendly ToolError mapping (D-11)", () => {
     // Phase-69 per-session gate: the X-Api-Session token expired. The wrapper must
     // tell the user to open the reproveUrl, complete 2FA, and PASTE the new token via
     // the set_session tool — no client restart, and NOT the generic key message.
-    const reproveUrl = "https://beta.sedis.se/Identity/Account/Manage/ReproveApi";
+    const reproveUrl = "https://app.sedis.se/Identity/Account/Manage/ReproveApi";
     fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse(401, {
         type: "https://datatracker.ietf.org/doc/html/rfc7235#section-3.1",
@@ -125,7 +125,7 @@ describe("RFC 7807 → friendly ToolError mapping (D-11)", () => {
   });
 
   it("401 session_invalid → reprove + set_session, hints a stale/wrong paste (MCP-01/D-04)", async () => {
-    const reproveUrl = "https://beta.sedis.se/Identity/Account/Manage/ReproveApi";
+    const reproveUrl = "https://app.sedis.se/Identity/Account/Manage/ReproveApi";
     fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       jsonResponse(401, {
         type: "https://datatracker.ietf.org/doc/html/rfc7235#section-3.1",

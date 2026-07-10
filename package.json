@@ -43,7 +43,7 @@
     "build": "tsc",
     "build:mcpb": "node scripts/build-mcpb.mjs",
     "test": "vitest run",
-    "snapshot:openapi": "curl -fsS https://beta.sedis.se/openapi/v2.json -o test/fixtures/openapi-v2.snapshot.json",
+    "snapshot:openapi": "curl -fsS https://api.sedis.se/openapi/v2.json -o test/fixtures/openapi-v2.snapshot.json",
     "changeset": "changeset",
     "version-packages": "changeset version && node scripts/sync-version.mjs",
     "release": "changeset publish"

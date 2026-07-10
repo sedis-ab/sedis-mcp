@@ -96,28 +96,30 @@ token** alongside `X-Api-Key`, refreshed periodically via two-factor auth:
 **Machine / org-wide keys (no owner) are headless** — `X-Api-Key` only, no
 session token, and you never call `set_session`.
 
-### Local development / testing against beta
+### Local development / testing against a non-production environment
 
-To run a local build (unpublished) or point at a non-prod environment, swap `npx`
+To run a local build (unpublished) or point at a non-production environment, swap `npx`
 for the built entrypoint and override the base URL:
 
 ```jsonc
 {
   "mcpServers": {
-    "sedis-beta": {
+    "sedis-local": {
       "command": "node",
       "args": ["/absolute/path/to/sedis-mcp/build/index.js"],
       "env": {
-        "SEDIS_API_KEY": "your-beta-key",
-        "SEDIS_API_BASE_URL": "https://beta.sedis.se"
+        "SEDIS_API_KEY": "your-non-production-key",
+        "SEDIS_API_BASE_URL": "https://<your-non-production-host>"
       }
     }
   }
 }
 ```
 
-This is a development convenience only — production users just use the `npx -y @sedis/mcp`
-block above with a single `SEDIS_API_KEY`.
+Ask the Sedis team for the host name — non-production environments are not publicly
+documented. This is a development convenience only; production users just use the
+`npx -y @sedis/mcp` block above with a single `SEDIS_API_KEY`, which defaults to
+`https://api.sedis.se`.
 
 ## Tools
 
