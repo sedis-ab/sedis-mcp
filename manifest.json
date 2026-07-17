@@ -3,7 +3,7 @@
   "manifest_version": "0.4",
   "name": "sedis",
   "display_name": "Sedis",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "Query Sedis Bolagsanalys (listed-company financials) and Fastighetsbenchmark (real-estate comparables) in natural language — read-only.",
   "long_description": "A one-click Claude Desktop install of the Sedis PartnerAPI v2 MCP server. Ask questions about Sedis data — listed-company financials (Bolagsanalys) and real-estate comparables (Fastighetsbenchmark) — directly in Claude, in plain language. The server is a thin, read-only pass-through: it never writes or ingests data, and your API key is sent only as the X-Api-Key header and never logged. Get a key from your Sedis administrator; a customer-level (M2M) key needs no per-session two-factor step.",
   "author": {
