@@ -22,7 +22,7 @@
   "bugs": {
     "url": "https://github.com/sedis-ab/sedis-mcp/issues"
   },
-  "homepage": "https://github.com/sedis-ab/sedis-mcp#readme",
+  "homepage": "https://www.sedis.se/fraga-sedis/",
   "type": "module",
   "bin": {
     "sedis": "build/index.js"

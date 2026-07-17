@@ -14,6 +14,11 @@ server is a **thin pass-through**: it adds shape and transport only — every
 tenant-isolation, authentication, rate-limit, and billing rule lives in
 PartnerAPI v2, not here.
 
+> **Not a Sedis customer yet?** This server requires a Sedis PartnerAPI v2
+> key — there is no free tier or trial. Get in touch:
+> [info@sedis.se](mailto:info@sedis.se) ·
+> [Fråga Sedis](https://www.sedis.se/fraga-sedis/)
+
 ## Install
 
 ### Easiest: one-click Claude Desktop bundle (`.mcpb`) — recommended

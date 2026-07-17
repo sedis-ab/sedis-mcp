@@ -8,13 +8,13 @@
   "long_description": "A one-click Claude Desktop install of the Sedis PartnerAPI v2 MCP server. Ask questions about Sedis data — listed-company financials (Bolagsanalys) and real-estate comparables (Fastighetsbenchmark) — directly in Claude, in plain language. The server is a thin, read-only pass-through: it never writes or ingests data, and your API key is sent only as the X-Api-Key header and never logged. Get a key from your Sedis administrator; a customer-level (M2M) key needs no per-session two-factor step.",
   "author": {
     "name": "Sedis AB",
-    "url": "https://sedis.se"
+    "url": "https://www.sedis.se/"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/sedis-ab/sedis-mcp"
   },
-  "homepage": "https://github.com/sedis-ab/sedis-mcp#readme",
+  "homepage": "https://www.sedis.se/fraga-sedis/",
   "documentation": "https://github.com/sedis-ab/sedis-mcp#readme",
   "support": "https://github.com/sedis-ab/sedis-mcp/issues",
   "license": "MIT",
