@@ -1,7 +1,7 @@
 {
   "name": "@sedis/mcp",
   "version": "1.1.5",
-  "description": "Model Context Protocol server wrapping the Sedis PartnerAPI v2 (Bolagsanalys + Fastighetsbenchmark) as curated, read-only tools.",
+  "description": "MCP server for Sedis property data — bolagsanalys of listed Nordic real estate companies and fastighetsbenchmarking of your own portfolio. Cleaned quarterly financials, substansrabatt/substanspremie, and market data via the Sedis PartnerAPI.",
   "keywords": [
     "mcp",
     "model-context-protocol",
