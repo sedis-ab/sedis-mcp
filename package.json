@@ -49,15 +49,15 @@
     "release": "changeset publish"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@anthropic-ai/mcpb": "^2.1.2",
     "@changesets/cli": "^2.27.11",
-    "@types/node": "^26.1.0",
+    "@types/node": "^26.1.2",
     "esbuild": "^0.28.1",
-    "tsx": "^4.22.4",
+    "tsx": "^4.23.5",
     "typescript": "^6.0.3",
     "vitest": "^4.1.8"
   }
