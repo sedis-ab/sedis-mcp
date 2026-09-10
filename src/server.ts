@@ -12,6 +12,7 @@
 import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { registerGettingStartedResource } from "./resources/gettingStarted.js";
+import { applyToolSchemaDialectFix } from "./schemaDialect.js";
 import { registerBolagsanalysTools } from "./tools/bolagsanalys.js";
 import { registerFastighetsbenchmarkTools } from "./tools/fastighetsbenchmark.js";
 import { registerSessionTools } from "./tools/session.js";
@@ -81,5 +82,8 @@ export function buildServer(): McpServer {
   registerFastighetsbenchmarkTools(server);
   registerSessionTools(server);
 
-  return server;
+  // SED-1026: the SDK stamps "$schema": draft-07 on every converted tool schema,
+  // which Ajv2020-based clients (Claude Desktop) reject outright — the tools then
+  // never register. Must come after the register* calls; see schemaDialect.ts.
+  return applyToolSchemaDialectFix(server);
 }

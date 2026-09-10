@@ -1,5 +1,21 @@
 # @sedis/mcp
 
+## 1.1.6
+
+### Patch Changes
+
+- Fix tools failing to register in Claude Desktop and other Ajv2020-based MCP clients.
+
+  The MCP SDK stamps `"$schema": "http://json-schema.org/draft-07/schema#"` onto every
+  tool schema it converts, because its `tools/list` handler calls the Zod→JSON Schema
+  compat shim without a `target` and the shim falls back to draft-7. Clients that
+  validate tool schemas against JSON Schema 2020-12 reject the dialect outright and
+  refuse to register the tool, so every call fails before any request is made.
+
+  The dialect marker is now removed from the emitted `inputSchema`/`outputSchema`.
+  Nothing else changes: for these schemas the draft-7 and 2020-12 bodies are identical,
+  and omitting `$schema` is accepted by validators defaulting to either dialect.
+
 ## 1.1.5
 
 ### Patch Changes

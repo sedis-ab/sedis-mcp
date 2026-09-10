@@ -1,6 +1,6 @@
 {
   "name": "@sedis/mcp",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "MCP server for Sedis property data — bolagsanalys of listed Nordic real estate companies and fastighetsbenchmarking of your own portfolio. Cleaned quarterly financials, substansrabatt/substanspremie, and market data via the Sedis PartnerAPI.",
   "keywords": [
     "mcp",
