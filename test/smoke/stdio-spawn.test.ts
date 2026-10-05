@@ -2,7 +2,7 @@
 //
 // The ONE child-process test (everything else uses the in-process driver). It spawns
 // the BUILT `build/index.js` as a real Node child over stdio and connects an SDK
-// `Client` via `StdioClientTransport`, then `listTools()` and asserts all 12 tools
+// `Client` via `StdioClientTransport`, then `listTools()` and asserts all 14 tools
 // register. This proves the real `npx -y @sedis/mcp` path works end-to-end: the
 // shebang + `type:module` + `.js` ESM import specifiers all resolve when Node runs
 // the bin (the failure mode an in-process import would mask).
@@ -33,12 +33,15 @@ const EXPECTED_TOOLS = [
   "fastighetsbenchmark_list_jamforelseobjekt",
   "fastighetsbenchmark_get_comp_timeseries",
   "fastighetsbenchmark_list_reference_zones",
+  // SED-1093: shared reference data the property-unit filters take ids from.
+  "fastighetsbenchmark_list_municipalities",
+  "fastighetsbenchmark_list_property_types",
   // Phase 71-03 (MCP-01): runtime session-token refresh tools (mutating).
   "set_session",
   "clear_session",
 ] as const;
 
-describe("stdio child-process smoke: the real built bin registers all 12 tools (MCP-02)", () => {
+describe("stdio child-process smoke: the real built bin registers all 14 tools (MCP-02)", () => {
   let client: Client | undefined;
   let transport: StdioClientTransport | undefined;
 

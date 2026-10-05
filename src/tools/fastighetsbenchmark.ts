@@ -1,6 +1,6 @@
 // fastighetsbenchmark.ts — registration of the fastighetsbenchmark_* tools (Plan 03).
 //
-// Five curated, intent-named, READ-ONLY tools that make the §8 A6 worked flow
+// Curated, intent-named, READ-ONLY tools that make the §8 A6 worked flow
 // effortless (find zone → find your office units → find the parameter →
 // pull the time-series):
 //
@@ -9,6 +9,9 @@
 //   fastighetsbenchmark_list_samlingar          → containingCompSedisIds (fan-out)
 //   fastighetsbenchmark_list_jamforelseobjekt   → zone sedisId (+ opt-in lineage)
 //   fastighetsbenchmark_get_comp_timeseries     ← (sedisIdIn, parameterCode, range)
+//   fastighetsbenchmark_list_reference_zones    → shared market benchmarks
+//   fastighetsbenchmark_list_municipalities     → municipality ids (SED-1093)
+//   fastighetsbenchmark_list_property_types     → property-type ids (SED-1093)
 //
 // Each tool wraps exactly ONE v2 GET via callV2 (the single outbound point), folds
 // friendly paging/sort + lean-by-default field selection into named args, and
@@ -38,6 +41,10 @@ import {
   listJamforelseobjektOutput,
   listReferenceZonesInput,
   listReferenceZonesOutput,
+  listMunicipalitiesInput,
+  listMunicipalitiesOutput,
+  listPropertyTypesInput,
+  listPropertyTypesOutput,
 } from "../schemas/fastighetsbenchmark.js";
 import {
   getCompTimeseriesInput,
@@ -110,20 +117,26 @@ export function registerFastighetsbenchmarkTools(server: McpServer): void {
     {
       title: "Search your property units (Fastighet)",
       description:
-        "Read-only. Find YOUR property units (Fastighet) by name, property-type id, " +
-        "municipality, or comparison-zone membership, returning each unit's `sedisId`. " +
+        "Read-only. Find YOUR property units (Fastighet) by exact name, name fragment, " +
+        "property-type id, municipality, or comparison-zone membership, returning each " +
+        "unit's `sedisId` — the stable, case-sensitive key to use in every later call. " +
+        "`name` is the customer's own designation; an official property designation " +
+        "(fastighetsbeteckning, e.g. 'Klara 1:1') is not a name and is not searchable. " +
+        "Look up property-type and municipality ids with " +
+        "`fastighetsbenchmark_list_property_types` / `fastighetsbenchmark_list_municipalities`. " +
         "This is the §8 A6 flow's object-finding step: take a comparison zone from " +
         "`fastighetsbenchmark_list_jamforelseobjekt` and filter here with " +
         "`belongsToJamforelseobjektSedisId`, then pass the resulting `sedisId`s to " +
         "`fastighetsbenchmark_get_comp_timeseries` via `sedisIdIn`. Lean by default: " +
         "geometry is omitted unless you set `includeGeometry: true`. Example: " +
-        "propertyType 1 (Office), belongsToJamforelseobjektSedisId 'JO-A'. " +
+        "propertyType 2, belongsToJamforelseobjektSedisId 'JO-A'. " +
         "Tenant-scoped to your data; read-only — never writes.",
       inputSchema: searchPropertyUnitsInput,
       outputSchema: searchPropertyUnitsOutput,
       annotations: { readOnlyHint: true, openWorldHint: true },
     },
     async ({
+      name,
       nameContains,
       propertyType,
       propertyTypeName,
@@ -136,14 +149,16 @@ export function registerFastighetsbenchmarkTools(server: McpServer): void {
       pageSize,
     }): Promise<CallToolResult> =>
       runTool("/fastighetsbenchmark/property-units", {
+        name,
         nameContains,
         propertyType,
         propertyTypeName,
         municipalityId,
         belongsToJamforelseobjektSedisId,
         lang,
-        // Lean-by-default: only request the heavy geometry member when asked (?fields=).
-        fields: includeGeometry ? "sedisId,name,propertyType,municipalityId,geometry,lastUpdatedUtc" : undefined,
+        // Lean-by-default: only request the heavy geometry member when asked (?fields=). Only names the
+        // property-units fields whitelist accepts — propertyType/municipalityId there answered 400 (SED-1093).
+        fields: includeGeometry ? "sedisId,name,lastUpdatedUtc,geometry" : undefined,
         sort,
         page,
         pageSize,
@@ -274,6 +289,59 @@ export function registerFastighetsbenchmarkTools(server: McpServer): void {
     },
     async ({ nameContains, sort, page, pageSize }): Promise<CallToolResult> =>
       runTool("/fastighetsbenchmark/reference-zones", {
+        nameContains,
+        sort,
+        page,
+        pageSize,
+      }),
+  );
+
+  // -------------------------------------------------------------------------
+  // 7. fastighetsbenchmark_list_municipalities → GET /fastighetsbenchmark/municipalities
+  // -------------------------------------------------------------------------
+  server.registerTool(
+    "fastighetsbenchmark_list_municipalities",
+    {
+      title: "List municipalities (shared)",
+      description:
+        "Read-only. Look up municipality ids — the `municipalityId` filter of " +
+        "`fastighetsbenchmark_search_property_units`. Shared reference data, the same for every " +
+        "key. Each row has `id`, `name`, `countryCode` and `code` (the official municipality code; " +
+        "for Sweden the SCB kommunkod, e.g. '0180'). Example: nameContains 'Stockholm' → id 21. " +
+        "Read-only — never writes.",
+      inputSchema: listMunicipalitiesInput,
+      outputSchema: listMunicipalitiesOutput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ nameContains, code, countryCode, sort, page, pageSize }): Promise<CallToolResult> =>
+      runTool("/fastighetsbenchmark/municipalities", {
+        nameContains,
+        code,
+        countryCode,
+        sort,
+        page,
+        pageSize,
+      }),
+  );
+
+  // -------------------------------------------------------------------------
+  // 8. fastighetsbenchmark_list_property_types → GET /fastighetsbenchmark/property-types
+  // -------------------------------------------------------------------------
+  server.registerTool(
+    "fastighetsbenchmark_list_property_types",
+    {
+      title: "List property types (shared)",
+      description:
+        "Read-only. Look up property-type ids — the `propertyType` filter of " +
+        "`fastighetsbenchmark_search_property_units` and the domain of the EB0 parameter. Shared " +
+        "reference data, the same for every key; names are Swedish. Example: nameContains 'Kontor'. " +
+        "Read-only — never writes.",
+      inputSchema: listPropertyTypesInput,
+      outputSchema: listPropertyTypesOutput,
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ nameContains, sort, page, pageSize }): Promise<CallToolResult> =>
+      runTool("/fastighetsbenchmark/property-types", {
         nameContains,
         sort,
         page,

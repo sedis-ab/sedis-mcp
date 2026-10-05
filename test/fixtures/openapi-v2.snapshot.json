@@ -2,13 +2,13 @@
   "openapi": "3.1.1",
   "info": {
     "title": "Sedis PartnerAPI v2",
-    "description": "The Sedis PartnerAPI v2 is a REST + JSON API for programmatic access to Sedis Fastighetsbenchmark and Bolagsanalys data.\n\nAuthenticate with the `X-Api-Key` header (issued per customer). Responses are camelCase and paged with the bare `{data, page, pageSize, totalCount, totalPages}` envelope.\n\nA CompDatum value carries EXACTLY ONE of `figure` (decimal) or `date` (ISO `yyyy-MM-dd`): parameters whose code starts with 'D' are date-typed and populate `date` (with `figure` null); all others populate `figure` (with `date` null). The `lastUpdatedUtc` field is a full UTC instant.\n\nThe code-defined CompDatum enum domains are published as typed integer-enum component schemas (CompClassification = EA0, CompTransactionKind = EC0, CompTransactionType = ED0, CompEpcEnvironmentalRating = EE0, CompValuationMethod = EF0, CompValuationAgency = EG0, CompSustainabilityCertification = EH0); a CompDatum enum value's `enum.value` is the integer they enumerate. EB0 (PropertyType) is the exception: it is DATA-DRIVEN (a database table, not a compile-time enum) and therefore has no static schema — discover its live domain at runtime via `/v2/fastighetsbenchmark/parameters/EB0` (`enumValues`).",
+    "description": "The Sedis PartnerAPI v2 is a REST + JSON API for programmatic access to Sedis Fastighetsbenchmark and Bolagsanalys data.\n\nAuthenticate with the `X-Api-Key` header (issued per customer). Responses are camelCase and paged with the bare `{data, page, pageSize, totalCount, totalPages}` envelope.\n\nA CompDatum value carries EXACTLY ONE of `figure` (decimal) or `date` (ISO `yyyy-MM-dd`): parameters whose code starts with 'D' are date-typed and populate `date` (with `figure` null); all others populate `figure` (with `date` null). The `lastUpdatedUtc` field is a full UTC instant.\n\nThe code-defined CompDatum enum domains are published as typed integer-enum component schemas (CompClassification = EA0, CompTransactionKind = EC0, CompTransactionType = ED0, CompEpcEnvironmentalRating = EE0, CompValuationMethod = EF0, CompValuationAgency = EG0, CompSustainabilityCertification = EH0); a CompDatum enum value's `enum.value` is the integer they enumerate. EB0 (PropertyType) is the exception: it is DATA-DRIVEN (a database table, not a compile-time enum) and therefore has no static schema — discover its live domain at runtime via `/v2/fastighetsbenchmark/property-types` (or `parameters/EB0` `enumValues`).\n\nWriting (Fastighetsbenchmark): create property units with POST property-units and update them with PUT — an upload of values (POST comp-uploads) never creates a property unit. Writes are strict: a broken rule answers 422 `application/problem+json` (RFC 9457) with `errors[]` of `{ pointer, code, detail }` — pointer a JSON Pointer into the request body, code a stable machine-readable error code — and nothing is saved. Problem `type`s are stable URIs under `https://api.sedis.se/problems/`. POSTs need an `Idempotency-Key` header.",
     "contact": {
       "name": "Sedis AB",
       "url": "https://www.sedis.se/",
       "email": "info@sedis.se"
     },
-    "version": "2.0.0"
+    "version": "2.1.0"
   },
   "servers": [
     {
@@ -474,8 +474,8 @@
         "tags": [
           "Fastighetsbenchmark"
         ],
-        "summary": "Ingests customer data into the CompUpload pipeline for the calling tenant.",
-        "description": "Stages a CompUpload (one ValueDate) owned by the calling API key's tenant (the owner is NEVER read from the body). Requires a mandatory Idempotency-Key header; replaying the same key returns the original response without staging a duplicate. Returns 201 with the staged upload id + status; 409 when a non-Uploaded upload already exists for the same ValueDate; 400 (RFC 7807, extensions.invalidFields) on validation errors.",
+        "summary": "Stores a customer's values for one value date, optionally submitting them to Sedis.",
+        "description": "One request = one value date, 1–1000 rows (body at most 5 MB). Each row names one of the calling customer's own property units by sedisId or exact name (case-insensitive) — given both, they must agree — and carries values keyed by base-data parameter code, typed by the parameter's dataType: decimal → number, boolean → true/false, enum → an integer from enumValues (EB0: an id from GET property-types), date → \"yyyy-MM-dd\"; null deletes the stored value, a code left out is left unchanged. A property unit may appear on one row only. valueDate must be the end of a quarter; until quarterly and half-yearly data is released, only 31 December. Strict: any broken rule → 422 (type …/problems/validation) with errors[] of { pointer, code, detail } and nothing is saved. Posting again for the same date replaces the upload while it is uploaded; once submitted or published → 409 (type …/problems/conflict, extensions.existingUploadId). submit: true sends it to Sedis for review in the same call and then also requires a property classification (EA0) and a property type (EB0) for every property unit on the value date. Requires an Idempotency-Key header. Returns 201 with Location and the upload, echoing each row's sedisId.",
         "operationId": "CreatePartnerApiV2FbmCompUpload",
         "parameters": [
           {
@@ -490,6 +490,15 @@
             "name": "Accept-Language",
             "in": "header",
             "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "A unique value per logical request, e.g. a UUID. Retrying with the same key within 24 hours returns the first response without running the request again, so a retry never creates twice. Scoped to your customer. Missing → 400.",
+            "required": true,
             "schema": {
               "type": "string"
             }
@@ -511,7 +520,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CompUploadIngestResult"
+                  "$ref": "#/components/schemas/CompUploadResponse"
                 }
               }
             }
@@ -538,6 +547,116 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/comp-uploads/{id}": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Gets one of the customer's uploads — where it is, and which property unit each row matched.",
+        "description": "status is uploaded (saved, can be replaced), submitted (with Sedis for review), publishing, or published (the values are live). An upload Sedis sends back is uploaded again. The id is resolved within the calling customer, so another customer's upload is 404.",
+        "operationId": "GetPartnerApiV2FbmCompUpload",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The integer id of the resource, as returned in the list or by the create response.",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompUploadResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found RFC 7807 ProblemDetails. extensions.traceId carries the W3C/Application Insights correlation id.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -655,6 +774,7 @@
           {
             "name": "isCloneOfSedisObjektSedisId",
             "in": "query",
+            "description": "Exact-match filter on the SedisId of the SedisObjekt the Jämförelseobjekt is a clone of.",
             "schema": {
               "type": "string"
             }
@@ -973,13 +1093,483 @@
         }
       }
     },
+    "/v2/fastighetsbenchmark/municipalities": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Lists municipalities.",
+        "description": "Returns the v2 municipalities list (camelCase, bare envelope). Reference data — identical for every API key. code is the official municipality code (for Sweden the four-digit SCB kommunkod, e.g. \"0180\"; null outside Sweden): map your own codes to Sedis ids with ?code=. Supports paging, whitelisted sort (default name), sparse fieldsets, and the named filters code, countryCode, nameContains.",
+        "operationId": "GetPartnerApiV2FbmMunicipalities",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number (default 1). Combine with pageSize to walk a result set.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Number of rows per page (default 50, clamped to a maximum of 500; when clamped the response carries the Sedis-Page-Size-Clamped: true header).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Comma-separated whitelisted sort fields; prefix a field with '-' for descending (e.g. sort=name,-valueDate). Only the fields a given resource exposes are accepted — an unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset: limits the response to the named fields and opts IN to optional fields (e.g. fields=sedisId,name,geometry). An unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "description": "When false, the bulk-sync count opt-out (D-12): totalCount and totalPages are returned null to skip the count query. Defaults to true.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "description": "Exact-match filter on the parameter code (e.g. NX71).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "countryCode",
+            "in": "query",
+            "description": "ISO-3166 alpha-2 country-code filter (e.g. SE).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "nameContains",
+            "in": "query",
+            "description": "Case-insensitive substring filter on the resource name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfMunicipalityResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/municipalities/{id}": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Gets a single municipality by id.",
+        "operationId": "GetPartnerApiV2FbmMunicipality",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The integer id of the resource, as returned in the list or by the create response.",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MunicipalityResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found RFC 7807 ProblemDetails. extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/property-types": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Lists property types.",
+        "description": "Returns the v2 property-types list (camelCase, bare envelope). Reference data — identical for every API key. id is the value an upload sends for the EB0 parameter and the value ?propertyType= filters on; names are Swedish. Same rows as GET parameters/EB0 enumValues. Supports paging, whitelisted sort (default name), sparse fieldsets, and the named filter nameContains.",
+        "operationId": "GetPartnerApiV2FbmPropertyTypes",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "1-based page number (default 1). Combine with pageSize to walk a result set.",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "description": "Number of rows per page (default 50, clamped to a maximum of 500; when clamped the response carries the Sedis-Page-Size-Clamped: true header).",
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ],
+              "format": "int32"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "description": "Comma-separated whitelisted sort fields; prefix a field with '-' for descending (e.g. sort=name,-valueDate). Only the fields a given resource exposes are accepted — an unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fields",
+            "in": "query",
+            "description": "Comma-separated sparse fieldset: limits the response to the named fields and opts IN to optional fields (e.g. fields=sedisId,name,geometry). An unknown field returns 400 with extensions.invalidFields.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "count",
+            "in": "query",
+            "description": "When false, the bulk-sync count opt-out (D-12): totalCount and totalPages are returned null to skip the count query. Defaults to true.",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "nameContains",
+            "in": "query",
+            "description": "Case-insensitive substring filter on the resource name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerApiV2EnvelopeOfPropertyTypeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v2/fastighetsbenchmark/property-types/{id}": {
+      "get": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Gets a single property type by id.",
+        "operationId": "GetPartnerApiV2FbmPropertyType",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The integer id of the resource, as returned in the list or by the create response.",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyTypeResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found RFC 7807 ProblemDetails. extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v2/fastighetsbenchmark/property-units": {
       "get": {
         "tags": [
           "Fastighetsbenchmark"
         ],
         "summary": "Lists Fastigheter visible to the calling tenant.",
-        "description": "Returns the v2 property-units list (camelCase, bare envelope), scoped to the calling API key's tenant. Supports paging, whitelisted sort, sparse fieldsets, and the named filters sedisId, sedisIdIn, nameContains, municipalityId, propertyType, propertyTypeName.",
+        "description": "Returns the v2 property-units list (camelCase, bare envelope), scoped to the calling API key's tenant. Supports paging, whitelisted sort, sparse fieldsets, and the named filters sedisId, sedisIdIn, name (exact, case-insensitive — the lookup from your own designation to the sedisId), nameContains, municipalityId, propertyType, propertyTypeName.",
         "operationId": "GetPartnerApiV2FbmPropertyUnits",
         "parameters": [
           {
@@ -1050,6 +1640,14 @@
             }
           },
           {
+            "name": "name",
+            "in": "query",
+            "description": "Exact-match filter on the resource name (surrounding whitespace ignored) — finds the sedisId of a property unit you created by name.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "nameContains",
             "in": "query",
             "description": "Case-insensitive substring filter on the resource name.",
@@ -1060,7 +1658,7 @@
           {
             "name": "municipalityId",
             "in": "query",
-            "description": "Integer municipality id filter. Valid ids appear as municipality.id on property-unit rows (there is no separate lookup resource).",
+            "description": "Integer municipality id filter. Valid ids are listed by GET municipalities.",
             "schema": {
               "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": [
@@ -1073,7 +1671,7 @@
           {
             "name": "propertyType",
             "in": "query",
-            "description": "Integer property-type id filter (NOT a name). Valid ids appear as propertyType.id on property-unit rows.",
+            "description": "Integer property-type id filter (NOT a name). Valid ids are listed by GET property-types.",
             "schema": {
               "pattern": "^-?(?:0|[1-9]\\d*)$",
               "type": [
@@ -1086,6 +1684,7 @@
           {
             "name": "propertyTypeName",
             "in": "query",
+            "description": "Case-insensitive substring filter on the property-type name (stored in Swedish, e.g. 'Kontor'). Combines with propertyType.",
             "schema": {
               "type": "string"
             }
@@ -1221,6 +1820,122 @@
             }
           }
         }
+      },
+      "post": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Creates a property unit — the only way to create one.",
+        "description": "Creates a property unit owned by the calling API key's customer (never read from the body) and returns it with its sedisId — 201 with Location and ETag. Requires an Idempotency-Key header; replaying the same key returns the original response. 409 (type …/problems/conflict, extensions.existingSedisId) when the customer already has a property unit with that name — update it with PUT instead. 422 (type …/problems/validation) lists every broken rule as errors[] of { pointer, code, detail }; nothing is saved. Rules: name is required and unique per customer (case-insensitive). A Swedish property with an officialDesignation needs municipalityId (a Swedish designation is unique only with its municipality). address groups streetNameAndNumber, postalCode, postalTown and countryCode (ISO 3166-1 alpha-2, default SE). municipalityId must exist (GET municipalities) and lie in address.countryCode. geometry is an optional GeoJSON Point; coordinates are always [x, y] — [longitude, latitude] for CRS84 (the default geometryCrs, http://www.opengis.net/def/crs/OGC/1.3/CRS84) or [easting, northing] for SWEREF 99 TM (http://www.opengis.net/def/crs/EPSG/0/3006); the short forms CRS84, EPSG:4326 and EPSG:3006 are accepted too. A Swedish point must lie in its municipality (or in Sweden); a point is never corrected. When geometry is given it is the property's location and is never overwritten by Sedis's own lookups; when omitted, Sedis locates the property from the official designation (Sweden) or the address, and may complete address.postalCode and municipalityId from the address.",
+        "operationId": "CreatePartnerApiV2FbmPropertyUnit",
+        "parameters": [
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "A unique value per logical request, e.g. a UUID. Retrying with the same key within 24 hours returns the first response without running the request again, so a retry never creates twice. Scoped to your customer. Missing → 400.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PropertyUnitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyUnitResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/v2/fastighetsbenchmark/property-units/{sedisId}": {
@@ -1288,6 +2003,150 @@
           },
           "404": {
             "description": "Not Found RFC 7807 ProblemDetails. extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests RFC 7807 ProblemDetails. extensions.rateLimitRemaining is 0 and extensions.retryAfterSeconds mirrors the Retry-After header (the seconds to wait before retrying).",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds the client should wait before retrying (emitted on 429 from the sliding-window rate-limiter lease).",
+                "schema": {
+                  "type": "integer",
+                  "format": "int32"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Fastighetsbenchmark"
+        ],
+        "summary": "Replaces a property unit's attributes — the only way to rename one.",
+        "description": "Full replace: an optional field that is omitted or null is cleared. The {sedisId} is resolved within the calling customer, so another customer's — or an unknown — sedisId is 404. Optional If-Match: send the ETag from an earlier GET and the update is refused with 412 (type …/problems/precondition-failed) if someone changed the property unit since; compared on the resource version (weak comparison, as v2 ETags are weak). PUT is idempotent and needs no Idempotency-Key. 409 when the new name is taken by another of the customer's property units; 422 as for POST. Returns 200 with the updated resource and its new ETag. Rules: name is required and unique per customer (case-insensitive). A Swedish property with an officialDesignation needs municipalityId (a Swedish designation is unique only with its municipality). address groups streetNameAndNumber, postalCode, postalTown and countryCode (ISO 3166-1 alpha-2, default SE). municipalityId must exist (GET municipalities) and lie in address.countryCode. geometry is an optional GeoJSON Point; coordinates are always [x, y] — [longitude, latitude] for CRS84 (the default geometryCrs, http://www.opengis.net/def/crs/OGC/1.3/CRS84) or [easting, northing] for SWEREF 99 TM (http://www.opengis.net/def/crs/EPSG/0/3006); the short forms CRS84, EPSG:4326 and EPSG:3006 are accepted too. A Swedish point must lie in its municipality (or in Sweden); a point is never corrected. When geometry is given it is the property's location and is never overwritten by Sedis's own lookups; when omitted, Sedis locates the property from the official designation (Sweden) or the address, and may complete address.postalCode and municipalityId from the address.",
+        "operationId": "UpdatePartnerApiV2FbmPropertyUnit",
+        "parameters": [
+          {
+            "name": "sedisId",
+            "in": "path",
+            "description": "The SedisId (string natural key) of the resource to fetch.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lang",
+            "in": "query",
+            "description": "Response language for localized text (parameter names/descriptions, status messages). Accepts 'en' (default) or 'sv'. Equivalent to the Accept-Language header; the query parameter wins when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept-Language",
+            "in": "header",
+            "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "The ETag from an earlier GET. The update is applied only if the resource is still at that version; otherwise 412. Omit it to update unconditionally.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PropertyUnitRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropertyUnitResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request RFC 7807 ProblemDetails. extensions.invalidFields lists the rejected query parameter name(s); extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found RFC 7807 ProblemDetails. extensions.traceId carries the W3C/Application Insights correlation id.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Precondition Failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1875,6 +2734,15 @@
             "name": "Accept-Language",
             "in": "header",
             "description": "Preferred response language for localized text (en or sv). The ?lang= query parameter takes precedence when both are sent.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "A unique value per logical request, e.g. a UUID. Retrying with the same key within 24 hours returns the first response without running the request again, so a retry never creates twice. Scoped to your customer. Missing → 400.",
+            "required": true,
             "schema": {
               "type": "string"
             }
@@ -2578,6 +3446,7 @@
           {
             "name": "quarterId",
             "in": "query",
+            "description": "Exact-match filter on a single quarter, as 20251 or 2025Q1.",
             "schema": {
               "type": "string"
             }
@@ -2995,40 +3864,48 @@
         "type": "object",
         "properties": {
           "companyId": {
-            "type": "string"
+            "type": "string",
+            "description": "The Sedis-internal company key (v1 `CId` ← `Company.ExternalId`)."
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The company name."
           },
           "nextReportDate": {
             "type": [
               "null",
               "string"
             ],
+            "description": "The date of the next report to be published, when known.",
             "format": "date"
           },
           "isInactive": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "True if Sedis has marked the company inactive."
           },
           "latestReportUri": {
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "A link to the latest published financial report, when available."
           },
           "countryCode": {
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "ISO-3166 alpha-2 country code, when known."
           },
           "nationalIdentificationNumber": {
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "The Swedish \"organisationsnummer\" (national identification number), when known."
           }
-        }
+        },
+        "description": "A listed company Sedis holds Bolagsanalys data about — the v2 REST reshape of the v1 OData\n`Companies` resource (item type for `GET /v2/bolagsanalys/companies`)."
       },
       "CompClassification": {
         "enum": [
@@ -3056,6 +3933,7 @@
               "null",
               "string"
             ],
+            "description": "The lower bound of the collection's date window (← `CompCollection.FilterFrom`), when set.",
             "format": "date"
           },
           "filterTo": {
@@ -3063,45 +3941,56 @@
               "null",
               "string"
             ],
+            "description": "The upper bound of the collection's date window (← `CompCollection.FilterTo`), when set.",
             "format": "date"
           },
           "containingCompSedisIds": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "The `sedisId`s of the Comps contained in this collection (← `CompCollection.ContainingComps`) —\n<b>IDs only, not nested objects</b> (D-27/D-30). The partner follows up with `?sedisId=in:…` on\nthe relevant resource to expand them; this avoids graph explosion."
           },
           "sedisId": {
-            "type": "string"
+            "type": "string",
+            "description": "The Sedis key (← `Comp.SedisId`): assigned by Sedis, never changes, case-sensitive — the id to store\nand use in later calls. Filterable via `?sedisId=` (+ `in:`)."
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The display name (← `Comp.Name`)."
           },
           "sourceName": {
-            "type": "string"
+            "type": "string",
+            "description": "The data source, exposed verbatim (← `Comp.SourceName`), e.g. \"Nils Holgersson\", \"Sedis-AB\"."
           },
           "insertedOnUtc": {
             "type": "string",
+            "description": "The ISO-8601 UTC instant the row was inserted (← `Comp.InsertedOnUtc`).",
             "format": "date-time"
           },
           "lastUpdatedUtc": {
             "type": "string",
+            "description": "The data-freshness contract (D-37 ETag source): the latest of the row-level freshness timestamps,\n`MAX(UpdatedOnUtc, RefreshedFromSourceOnUtc, FrozenOnUtc, InsertedOnUtc)`. Always populated (never a constant\n`null` — see the type remarks).",
             "format": "date-time"
           },
           "isLocked": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "True when the row is locked (← `Comp.IsLocked`)."
           },
           "freezeOnSourceChanges": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Phase-53 freeze state: true when the row is pinned and should not refresh from source."
           },
           "sourceUpdateAvailable": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "True when the source has been recalculated since this row was last refreshed."
           },
           "sourceUpdateAvailableSinceUtc": {
             "type": [
               "null",
               "string"
             ],
+            "description": "The ISO-8601 UTC instant a source update became available, when known.",
             "format": "date-time"
           },
           "refreshedFromSourceOnUtc": {
@@ -3109,6 +3998,7 @@
               "null",
               "string"
             ],
+            "description": "The ISO-8601 UTC instant the row was last refreshed from its source, when known.",
             "format": "date-time"
           },
           "frozenOnUtc": {
@@ -3116,9 +4006,12 @@
               "null",
               "string"
             ],
+            "description": "The ISO-8601 UTC instant the row was frozen, when frozen.",
             "format": "date-time"
           },
-          "geometry": { },
+          "geometry": {
+            "description": "GeoJSON geometry (SRID 4326), opt-in via `?fields=…,geometry` (D-25). Omitted by default\n(payload weight + geography-materialization cost). Populated server-side in 62-07 AFTER the page\nmaterializes (a settable member so the read service can attach the simplified Shape without an\nimmutable `with` against the abstract base)."
+          },
           "belongsToJamforelseobjekt": {
             "type": [
               "null",
@@ -3126,7 +4019,8 @@
             ],
             "items": {
               "$ref": "#/components/schemas/CompLineageRef"
-            }
+            },
+            "description": "The tenant's Jämförelseobjekt (clone Zones) this Comp belongs to (the bidirectional clone-membership\nlineage, 62-11), opt-in via `?fields=…,belongsToJamforelseobjekt`. The 2-hop REVERSE: the\ncaller's clones whose source SedisObjekt `ContainingComps` include this row — i.e.\n`{ clone Zone : clone.IsCloneOfComp ∈ this.PartOfCompCollections }`. Omitted by default;\npopulated through the TENANT-FILTERED context (Risk E) so a caller only ever sees its own clones.\nSettable so the read service can attach it post-materialization."
           },
           "tags": {
             "type": [
@@ -3135,9 +4029,11 @@
             ],
             "items": {
               "type": "string"
-            }
+            },
+            "description": "The Comp's tags, opt-in via `?fields=…,tags`. Omitted by default; populated in 62-07."
           }
-        }
+        },
+        "description": "A CompCollection — the v2 reshape of a CompCollection\n(item type for `GET /v2/fastighetsbenchmark/samlingar` — the customer-owned, tenant-scoped\ncollections). Extends CompBaseResponse (OpenAPI `allOf`). SedisAB-owned\nSedisObjekt collections are NOT a partner-fetchable resource (62-11): a partner sees its own clones\nof a SedisObjekt via the `/jamforelseobjekt` lineage, not the SedisObjekt itself."
       },
       "CompDatumEnumValue": {
         "required": [
@@ -3153,15 +4049,19 @@
               "integer",
               "string"
             ],
+            "description": "The raw integer value (the EB0/E-code figure cast to int).",
             "format": "int32"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The resolved enum member / property-type name."
           },
           "enumType": {
-            "type": "string"
+            "type": "string",
+            "description": "The enum domain label — which enum this code resolves to (e.g. `PropertyType`, `CompClassification`\n)."
           }
-        }
+        },
+        "description": "A resolved enum CompDatum value — the `{value, name, enumType}` object surfaced for\nstring CompDatumResponse.DataType=`enum`. int CompDatumEnumValue.Value is the raw integer (the\nfigure cast to int), string CompDatumEnumValue.Name the resolved enum/property-type name, string CompDatumEnumValue.EnumType\nthe domain label (e.g. `\"PropertyType\"`, `\"CompClassification\"`)."
       },
       "CompDatumResponse": {
         "required": [
@@ -3172,17 +4072,21 @@
         "type": "object",
         "properties": {
           "sedisId": {
-            "type": "string"
+            "type": "string",
+            "description": "The parent Comp's Sedis natural key (← `CompDatum.SedisId`). FK to the Comp."
           },
           "parameterCode": {
-            "type": "string"
+            "type": "string",
+            "description": "The CompParameter code (← `CompDatum.CompParameterCode`). Its first letter decides\nstring CompDatumResponse.DataType."
           },
           "valueDate": {
             "type": "string",
+            "description": "The value-applies-to date / period the figure applies to (← `CompDatum.ValueDate`); ISO\n`yyyy-MM-dd`. Part of the natural key. Distinct from DateOnly? CompDatumResponse.Date.",
             "format": "date"
           },
           "dataType": {
-            "type": "string"
+            "type": "string",
+            "description": "The value datatype, derived from string CompDatumResponse.ParameterCode's first letter via\n`CompParameterCodeParser`: one of `\"decimal\"`, `\"boolean\"`, `\"enum\"`,\n`\"date\"`. Tells the partner which value member to read."
           },
           "figure": {
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
@@ -3191,13 +4095,15 @@
               "number",
               "string"
             ],
+            "description": "The numeric value (← `CompDatum.Figure`, DECIMAL(19,4)). Carries the value for\nstring CompDatumResponse.DataType=`decimal`, and the RAW numeric for `boolean`/`enum`\n(transparency); `null` for `date`.",
             "format": "double"
           },
           "boolean": {
             "type": [
               "null",
               "boolean"
-            ]
+            ],
+            "description": "The resolved boolean — populated ONLY when string CompDatumResponse.DataType=`boolean` (a `B*`\nparameter, `1`=true / `0`=false); `null` otherwise."
           },
           "enum": {
             "oneOf": [
@@ -3205,6 +4111,7 @@
                 "type": "null"
               },
               {
+                "description": "The resolved enum value — populated ONLY when string CompDatumResponse.DataType=`enum` (an `E*`\nparameter): `{value, name, enumType}`; `null` otherwise. The full domain of each enum is\ndiscoverable via `/v2/fastighetsbenchmark/parameters/{code}`.",
                 "$ref": "#/components/schemas/CompDatumEnumValue"
               }
             ]
@@ -3214,9 +4121,11 @@
               "null",
               "string"
             ],
+            "description": "The date-typed value (← `CompDatum.Date`); ISO `yyyy-MM-dd`. Populated ONLY when\nstring CompDatumResponse.DataType=`date` (a `D*` parameter, e.g. transaction date); `null`\notherwise.",
             "format": "date"
           }
-        }
+        },
+        "description": "The flat v2 CompDatum time-series row (D-40; `/v2/fastighetsbenchmark/comp-data`). NEVER inlined\ninto a Comp response — a single Comp can carry thousands of CompDatum rows, so the time-series is always\na separate two-call fetch. Reshapes CompDatum with no nesting\n(no\nembedded Comp / CompParameter): field names follow the LOCKED 62-WIRE-VOCABULARY §B.4."
       },
       "CompEpcEnvironmentalRating": {
         "enum": [
@@ -3239,15 +4148,18 @@
         "type": "object",
         "properties": {
           "sedisId": {
-            "type": "string"
+            "type": "string",
+            "description": "The related Comp's Sedis natural key."
           },
           "name": {
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "The related Comp's display name, when included."
           }
-        }
+        },
+        "description": "A minimal lineage reference (a related Comp's `sedisId` + optional name) used by\nIReadOnlyList&lt;CompLineageRef&gt;? CompBaseResponse.BelongsToJamforelseobjekt (D-28). Populated in 62-07."
       },
       "CompParameterEnumValue": {
         "required": [
@@ -3262,12 +4174,15 @@
               "integer",
               "string"
             ],
+            "description": "The integer value (an enum member's underlying int, or a PropertyType id for EB0).",
             "format": "int32"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The resolved enum-member / property-type name."
           }
-        }
+        },
+        "description": "One member of a CompParameter's discoverable enum domain — the integer value and its resolved name."
       },
       "CompParameterResponse": {
         "required": [
@@ -3278,31 +4193,38 @@
         "type": "object",
         "properties": {
           "code": {
-            "type": "string"
+            "type": "string",
+            "description": "The parameter code, e.g. `FN0` (← `CompParameter.CompParameterCode`)."
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The localized parameter name (English default, Swedish fallback)."
           },
           "groupName": {
-            "type": "string"
+            "type": "string",
+            "description": "The localized parameter-group display name (English default, Swedish fallback)."
           },
           "description": {
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "The localized human-readable description (English default, Swedish fallback), when present."
           },
           "unit": {
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "The localized unit (English default, Swedish fallback)."
           },
           "isBaseData": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "True when the parameter is base (manually-entered) data; false when calculated."
           },
           "dataType": {
-            "type": "string"
+            "type": "string",
+            "description": "The value datatype of this parameter's CompDatum rows, derived from string CompParameterResponse.Code's first\nletter via `CompParameterCodeParser`: one of `\"decimal\"`, `\"boolean\"`, `\"enum\"`,\n`\"date\"`. Mirrors `CompDatumResponse.dataType` so partners know how to read the values."
           },
           "enumValues": {
             "type": [
@@ -3311,9 +4233,11 @@
             ],
             "items": {
               "$ref": "#/components/schemas/CompParameterEnumValue"
-            }
+            },
+            "description": "The discoverable enum domain — populated ONLY for `E`-prefix (enum) codes: the full set of\n`{value, name}` members. For `EB0` these are the PropertyType lookup rows; for the other\n`E`-codes the members of the mapped C# enum. `null` for non-enum codes. This is the\nproperty-type / enum discovery surface (item-4): GET an enum parameter to learn its legal values."
           }
-        }
+        },
+        "description": "A Fastighetsbenchmark parameter — the v2 reshape of a\nCompParameter\n(item type for `GET /v2/fastighetsbenchmark/parameters`). Reference data: shared across all\ntenants (D-04, no tenant filter). string CompParameterResponse.Name/string? CompParameterResponse.Description/string CompParameterResponse.GroupName/\nstring? CompParameterResponse.Unit are localized English-default (`*En ?? *Sv`, API-04), Swedish via\n`?lang=sv`."
       },
       "CompSustainabilityCertification": {
         "enum": [
@@ -3359,46 +4283,6 @@
         "description": "Transaction type (ED0). The integer carried by a CompDatum value's `enum.value` for parameter code ED0. Values: 0 = None; 1 = Company; 2 = RealEstate. The live domain is also discoverable at runtime via `/v2/fastighetsbenchmark/parameters/ED0` (`enumValues`).",
         "format": "int32"
       },
-      "CompUploadIngestResult": {
-        "required": [
-          "status",
-          "compUploadId",
-          "uploadStatus",
-          "rowCount",
-          "messages"
-        ],
-        "type": "object",
-        "properties": {
-          "status": {
-            "$ref": "#/components/schemas/PartnerApiV2IngestionStatus"
-          },
-          "compUploadId": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "uploadStatus": {
-            "type": "string"
-          },
-          "rowCount": {
-            "pattern": "^-?(?:0|[1-9]\\d*)$",
-            "type": [
-              "integer",
-              "string"
-            ],
-            "format": "int32"
-          },
-          "messages": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      },
       "CompUploadRequest": {
         "required": [
           "valueDate",
@@ -3411,19 +4295,77 @@
               "null",
               "string"
             ],
+            "description": "The value date the values apply to, ISO `yyyy-MM-dd`. Must be the end of a quarter (31 Mar, 30 Jun,\n30 Sep or 31 Dec); until quarterly and half-yearly data is released, only 31 December is accepted.",
             "format": "date"
           },
           "submit": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "When `true`, the upload is submitted to Sedis for publication in the same call — and must then meet\nthe publish requirements. Default `false`: the upload is saved as `uploaded`."
           },
           "rows": {
+            "maxItems": 1000,
             "minItems": 1,
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/CompUploadRowRequest"
-            }
+            },
+            "description": "One row per property unit — 1 to 1 000 rows. A property unit may appear on one row only."
           }
-        }
+        },
+        "description": "The request body for `POST /v2/fastighetsbenchmark/comp-uploads` — a customer's values for one value\ndate (SED-1093). <b>An upload of values never creates a property unit:</b> every row names an existing one\nof the customer's own, by `sedisId` or by exact `name`; create property units with\n`POST property-units` first."
+      },
+      "CompUploadResponse": {
+        "required": [
+          "id",
+          "valueDate",
+          "status",
+          "uploadedOnUtc",
+          "rowCount",
+          "rows"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The upload's id — `GET comp-uploads/{id}` follows it.",
+            "format": "int32"
+          },
+          "valueDate": {
+            "type": "string",
+            "description": "The value date the values apply to.",
+            "format": "date"
+          },
+          "status": {
+            "type": "string",
+            "description": "Where the upload is: `uploaded` (saved, can be replaced), `submitted` (with Sedis for review),\n`publishing`, or `published` (the values are live). A submitted upload that Sedis sends back is\n`uploaded` again."
+          },
+          "uploadedOnUtc": {
+            "type": "string",
+            "description": "When the upload was last saved, ISO-8601 UTC.",
+            "format": "date-time"
+          },
+          "rowCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The number of rows.",
+            "format": "int32"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CompUploadRowResponse"
+            },
+            "description": "Each row's property unit, in request order."
+          }
+        },
+        "description": "An upload of values (SED-1093) — the 201 body of `POST comp-uploads` and the body of\n`GET comp-uploads/{id}`. Echoes which property unit each row was matched to, so a partner's system\nlearns the sedisIds."
       },
       "CompUploadRowRequest": {
         "type": "object",
@@ -3432,66 +4374,54 @@
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "The property unit's sedisId — one of the customer's own, exactly as Sedis returned it (case-sensitive)."
           },
-          "internalDesignation": {
+          "name": {
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "The property unit's name (the customer's internal designation), matching exactly one of its own. An\nofficial designation is not a name and does not match."
           },
-          "officialDesignation": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "streetNameAndNumber": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "postalCode": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "postalAddress": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "municipalityId": {
+          "values": {
+            "type": "object",
+            "description": "Values keyed by parameter code (base-data parameters only — see `GET parameters`). The JSON type\nfollows the parameter's `dataType`: `decimal` → a number; `boolean` → `true`/`false`;\n`enum` → the integer value from the parameter's `enumValues` (for EB0, an id from\n`GET property-types`); `date` → an ISO date string `\"yyyy-MM-dd\"`. `null` deletes the\nstored value; a code that is left out is left unchanged."
+          }
+        },
+        "description": "One row of a CompUploadRequest: which property unit, and its values. Identify the property unit\nby string? CompUploadRowRequest.SedisId or by exact string? CompUploadRowRequest.Name (case-insensitive, surrounding whitespace ignored);\ngiven both, they must name the same one."
+      },
+      "CompUploadRowResponse": {
+        "required": [
+          "index"
+        ],
+        "type": "object",
+        "properties": {
+          "index": {
             "pattern": "^-?(?:0|[1-9]\\d*)$",
             "type": [
-              "null",
               "integer",
               "string"
             ],
+            "description": "The row's zero-based position in the request.",
             "format": "int32"
           },
-          "parameterValues": {
-            "type": "object",
-            "additionalProperties": {
-              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
-              "type": [
-                "null",
-                "number",
-                "string"
-              ],
-              "format": "double"
-            }
+          "sedisId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The property unit's sedisId. Always set for an upload made through the API; `null` only for a row of\nan Excel upload that creates its property unit when Sedis publishes it."
           },
-          "tagValues": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The property unit's name."
           }
-        }
+        },
+        "description": "Which property unit a row of an upload was matched to."
       },
       "CompValuationAgency": {
         "enum": [
@@ -3544,15 +4474,18 @@
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "The Samling's display name (required). Must be unique within the calling tenant (409 on collision)."
           },
           "containingCompSedisIds": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "The SedisIds of the member Fastigheter (PropertyUnits) this Samling aggregates. Only the calling\ntenant's own PropertyUnits are linked (the create service filters by owner + source); SedisIds\noutside the tenant are silently ignored, never written cross-tenant."
           }
-        }
+        },
+        "description": "The request body for `POST /v2/fastighetsbenchmark/samlingar` — create a customer-owned Samling\n(D-35, API-13). Mirrors the GUI Samling-create flow (`ICompCollectionService.CreateCollectionAsync`):\na name plus the SedisIds of the member Fastigheter (PropertyUnits) the collection aggregates."
       },
       "DatumResponse": {
         "required": [
@@ -3564,12 +4497,15 @@
         "type": "object",
         "properties": {
           "companyId": {
-            "type": "string"
+            "type": "string",
+            "description": "The Sedis-internal company key (← `Datum.QuarterlyReport.Company.ExternalId`)."
           },
           "parameterCode": {
-            "type": "string"
+            "type": "string",
+            "description": "The parameter code this figure is for (← `Datum.ParameterCode`)."
           },
           "quarterId": {
+            "description": "The quarter the figure applies to, encoded `yyyyq` (e.g. `20251` = 2025 Q1).",
             "$ref": "#/components/schemas/QuarterId"
           },
           "figure": {
@@ -3579,19 +4515,51 @@
               "number",
               "string"
             ],
+            "description": "The figure, when this is a numeric datum.",
             "format": "double"
           },
           "text": {
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "The text, when this is a text datum."
           },
           "lastUpdatedUtc": {
             "type": "string",
+            "description": "The full ISO-8601 UTC instant the datum was last inserted or updated.",
             "format": "date-time"
           }
-        }
+        },
+        "description": "A single Bolagsanalys data point — one company × parameter × quarter figure. The v2 REST reshape\nof the v1 OData `Data` resource (item type for `GET /v2/bolagsanalys/data`)."
+      },
+      "GeoJsonPointRequest": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Must be `\"Point\"`."
+          },
+          "coordinates": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+              "type": [
+                "number",
+                "string"
+              ],
+              "format": "double"
+            },
+            "description": "`[x, y]` — see GeoJsonPointRequest? PropertyUnitRequest.Geometry. A third (altitude) value is ignored."
+          }
+        },
+        "description": "A GeoJSON Point (RFC 7946 §3.1.2): `{ \"type\": \"Point\", \"coordinates\": [x, y] }`. The coordinates are\nalways `[x, y]` — `[longitude, latitude]` for CRS84 (the default), `[easting, northing]` for\nSWEREF 99 TM — whatever the formal axis order of the coordinate system: RFC 7946 for CRS84, and the\ntraditional GIS order (GDAL, PostGIS, QGIS) that Lantmäteriet's GeoJSON uses for SWEREF 99 TM. The\ncoordinate system is named by `geometryCrs` beside it (RFC 7946 removed the `crs` member)."
       },
       "JsonElement": { },
       "MunicipalityRef": {
@@ -3607,12 +4575,57 @@
               "integer",
               "string"
             ],
+            "description": "The municipality id (← `Municipality.MunicipalityId`).",
             "format": "int32"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The municipality name (← `Municipality.Name`)."
+          },
+          "code": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The official municipality code (SED-1093) — for Sweden the SCB kommunkod, e.g. \"0180\"; `null`\noutside Sweden. See string? MunicipalityResponse.Code."
           }
-        }
+        },
+        "description": "A resolved municipality reference — the `{id, name}` object surfaced instead of the raw FK."
+      },
+      "MunicipalityResponse": {
+        "required": [
+          "id",
+          "name",
+          "countryCode"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The Sedis municipality id (← `Municipality.MunicipalityId`) — the value requests take.",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "description": "The municipality name (← `Municipality.Name`), e.g. \"Stockholm\"."
+          },
+          "countryCode": {
+            "type": "string",
+            "description": "ISO 3166-1 alpha-2 country code (← `Municipality.CountryCode`), e.g. \"SE\"."
+          },
+          "code": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The official municipality code (← `Municipality.ExternalCode`) — for Sweden the four-digit SCB\nkommunkod, e.g. \"0180\". `null` where Sedis holds none (municipalities outside Sweden). Filterable\nvia `?code=`, so a partner maps its own codes to Sedis ids once."
+          }
+        },
+        "description": "A municipality — item type for `GET /v2/fastighetsbenchmark/municipalities` (SED-1093). Reference\ndata, identical for every API key: the id is what `municipalityId` on a property unit takes, the\nstring? MunicipalityResponse.Code is how a partner's own system finds it."
       },
       "ParameterResponse": {
         "required": [
@@ -3624,24 +4637,30 @@
         "type": "object",
         "properties": {
           "code": {
-            "type": "string"
+            "type": "string",
+            "description": "The parameter code, e.g. `NX71` (v1 `PId` ← `Parameter.ParameterCode`)."
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The localized parameter name (English default, Swedish fallback)."
           },
           "groupName": {
-            "type": "string"
+            "type": "string",
+            "description": "The localized parameter-group display name (English default, Swedish fallback)."
           },
           "description": {
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "The localized human-readable parameter description (English default, Swedish fallback); may be null."
           },
           "period": {
-            "type": "string"
+            "type": "string",
+            "description": "The time period the parameter applies to, e.g. \"Kvartal\"/\"Quarter\"."
           }
-        }
+        },
+        "description": "A Bolagsanalys parameter (the kind of figure a DatumResponse carries) — the v2 REST\nreshape of the v1 OData `Parameters` resource (item type for\n`GET /v2/bolagsanalys/parameters`)."
       },
       "PartnerApiV2EnvelopeOfCompanyResponse": {
         "required": [
@@ -3923,6 +4942,62 @@
         },
         "description": "The bare PartnerAPI v2 list envelope (D-12; locked in 62-WIRE-VOCABULARY §B.3). Every v2 list\nresponse serializes exactly these five fields — no OData `@odata.context` artifact, no\ncustom wrapping. Serialized camelCase via the v2 base controller's `V2Json` options."
       },
+      "PartnerApiV2EnvelopeOfMunicipalityResponse": {
+        "required": [
+          "data",
+          "page",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MunicipalityResponse"
+            },
+            "description": "The page of results. Item shape is the singular resource (D-31)."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The 1-indexed current page (D-11).",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The effective page size (after clamping; default 50, max 500 — D-11).",
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total matching rows; `null` when `?count=false` (D-12).",
+            "format": "int64"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total pages; `null` when `?count=false` (D-12).",
+            "format": "int32"
+          }
+        },
+        "description": "The bare PartnerAPI v2 list envelope (D-12; locked in 62-WIRE-VOCABULARY §B.3). Every v2 list\nresponse serializes exactly these five fields — no OData `@odata.context` artifact, no\ncustom wrapping. Serialized camelCase via the v2 base controller's `V2Json` options."
+      },
       "PartnerApiV2EnvelopeOfParameterResponse": {
         "required": [
           "data",
@@ -3935,6 +5010,62 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ParameterResponse"
+            },
+            "description": "The page of results. Item shape is the singular resource (D-31)."
+          },
+          "page": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The 1-indexed current page (D-11).",
+            "format": "int32"
+          },
+          "pageSize": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The effective page size (after clamping; default 50, max 500 — D-11).",
+            "format": "int32"
+          },
+          "totalCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total matching rows; `null` when `?count=false` (D-12).",
+            "format": "int64"
+          },
+          "totalPages": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "Total pages; `null` when `?count=false` (D-12).",
+            "format": "int32"
+          }
+        },
+        "description": "The bare PartnerAPI v2 list envelope (D-12; locked in 62-WIRE-VOCABULARY §B.3). Every v2 list\nresponse serializes exactly these five fields — no OData `@odata.context` artifact, no\ncustom wrapping. Serialized camelCase via the v2 base controller's `V2Json` options."
+      },
+      "PartnerApiV2EnvelopeOfPropertyTypeResponse": {
+        "required": [
+          "data",
+          "page",
+          "pageSize"
+        ],
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PropertyTypeResponse"
             },
             "description": "The page of results. Item shape is the singular resource (D-31)."
           },
@@ -4090,9 +5221,6 @@
           }
         },
         "description": "The bare PartnerAPI v2 list envelope (D-12; locked in 62-WIRE-VOCABULARY §B.3). Every v2 list\nresponse serializes exactly these five fields — no OData `@odata.context` artifact, no\ncustom wrapping. Serialized camelCase via the v2 base controller's `V2Json` options."
-      },
-      "PartnerApiV2IngestionStatus": {
-        "type": "integer"
       },
       "PartnerApiV2SearchRequest": {
         "type": "object",
@@ -4285,15 +5413,135 @@
               "integer",
               "string"
             ],
+            "description": "The property-type id (the EB0 datum's figure, ← `PropertyType.PropertyTypeId`).",
             "format": "int32"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The property-type name (← `PropertyType.Name`)."
           }
-        }
+        },
+        "description": "A resolved property-type reference — the `{id, name}` object derived from the EB0 datum."
+      },
+      "PropertyTypeResponse": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "description": "The property-type id (← `PropertyType.PropertyTypeId`).",
+            "format": "int32"
+          },
+          "name": {
+            "type": "string",
+            "description": "The property-type name (← `PropertyType.Name`, Swedish), e.g. \"Kontor\"."
+          }
+        },
+        "description": "A property type (Fastighetstyp) — item type for `GET /v2/fastighetsbenchmark/property-types`\n(SED-1093). The domain of the `EB0` parameter: the id is the value an upload sends for EB0 and the\nvalue `?propertyType=` filters on. Same rows as `parameters/EB0`'s `enumValues`."
+      },
+      "PropertyUnitAddress": {
+        "type": "object",
+        "properties": {
+          "streetNameAndNumber": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Street name and number, e.g. \"Sveavägen 12\". At most 600 characters."
+          },
+          "postalCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Postal code, e.g. \"111 57\". At most 10 characters."
+          },
+          "postalTown": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "Postal town (postort), e.g. \"Stockholm\". At most 100 characters."
+          },
+          "countryCode": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "ISO 3166-1 alpha-2 country code, e.g. \"SE\" — the default when omitted in a request."
+          }
+        },
+        "description": "A property's postal address (SED-1093) — the same shape in requests and responses. The municipality and the\nofficial designation are not part of it: they are the property's administrative identity, not its post."
+      },
+      "PropertyUnitRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The property's name — the customer's internal designation (Intern beteckning). Required, unique per\ncustomer (case-insensitive, surrounding whitespace ignored), at most 300 characters."
+          },
+          "officialDesignation": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The official property designation (Fastighetsbeteckning), e.g. \"Gladan 4\". In Sweden it is unique only\ntogether with the municipality, so int? PropertyUnitRequest.MunicipalityId is then required. It describes the\nproperty and is never used to find a property unit — use `sedisId` or `name` for that."
+          },
+          "address": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "The property's postal address — street, postal code, town and country belong together. Optional; the\ncountry defaults to Sweden.",
+                "$ref": "#/components/schemas/PropertyUnitAddress"
+              }
+            ]
+          },
+          "municipalityId": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "description": "The municipality id from `GET municipalities`. Must be in the address's country. Required for a\nSwedish property that has an string? PropertyUnitRequest.OfficialDesignation.",
+            "format": "int32"
+          },
+          "geometry": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "The property's location as a GeoJSON Point (RFC 7946). `coordinates` is always `[x, y]`:\n`[longitude, latitude]` for CRS84, `[easting, northing]` for SWEREF 99 TM — whatever the\nformal axis order of the coordinate system. When given, it is the property's location and is never\noverwritten by Sedis's own lookups; when omitted, Sedis locates the property from the official\ndesignation or the address. Must lie in the municipality (Sweden) or the country.",
+                "$ref": "#/components/schemas/GeoJsonPointRequest"
+              }
+            ]
+          },
+          "geometryCrs": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "description": "The coordinate system of GeoJsonPointRequest? PropertyUnitRequest.Geometry: `http://www.opengis.net/def/crs/OGC/1.3/CRS84`\n(WGS 84 longitude/latitude — the default) or `http://www.opengis.net/def/crs/EPSG/0/3006`\n(SWEREF 99 TM). The short forms `CRS84`, `EPSG:4326` and `EPSG:3006` are accepted too."
+          }
+        },
+        "description": "The request body for `POST /v2/fastighetsbenchmark/property-units` (create) and\n`PUT /v2/fastighetsbenchmark/property-units/{sedisId}` (full replace) — SED-1093. The only way to create\na property unit and the only way to rename one."
       },
       "PropertyUnitResponse": {
         "required": [
+          "address",
           "sedisId",
           "name",
           "sourceName",
@@ -4306,7 +5554,8 @@
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "The official property designation (← `PropertyUnit.OfficialDesignation`), when known."
           },
           "municipality": {
             "oneOf": [
@@ -4314,27 +5563,35 @@
                 "type": "null"
               },
               {
+                "description": "The municipality as a resolved `{id, name}` object (← the `Municipality` nav), NOT the raw\n`MunicipalityId` FK (D-31 / D-39). `null` when the property has no municipality.",
                 "$ref": "#/components/schemas/MunicipalityRef"
               }
             ]
+          },
+          "address": {
+            "description": "The property's postal address — street, postal code, town and country (SED-1093; the same shape a\n`POST`/`PUT` takes). Properties registered before countries were recorded are Swedish.",
+            "$ref": "#/components/schemas/PropertyUnitAddress"
           },
           "postalAddress": {
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "Deprecated — use `address.postalTown`. The postal town, when known. Removed in a future v3."
           },
           "postalCode": {
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "Deprecated — use `address.postalCode`. The postal code, when known. Removed in a future v3."
           },
           "streetNameAndNumber": {
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "Deprecated — use `address.streetNameAndNumber`. The street name and number, when known. Removed in a\nfuture v3."
           },
           "propertyType": {
             "oneOf": [
@@ -4342,41 +5599,51 @@
                 "type": "null"
               },
               {
+                "description": "The property type as a resolved `{id, name}` object, derived from the property's\n`EB0` (PropertyType) CompDatum value joined to the `PropertyType` lookup. `null`\nwhen the property carries no EB0 datum. Filterable via `?propertyType=` (the type id).",
                 "$ref": "#/components/schemas/PropertyTypeRef"
               }
             ]
           },
           "sedisId": {
-            "type": "string"
+            "type": "string",
+            "description": "The Sedis key (← `Comp.SedisId`): assigned by Sedis, never changes, case-sensitive — the id to store\nand use in later calls. Filterable via `?sedisId=` (+ `in:`)."
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The display name (← `Comp.Name`)."
           },
           "sourceName": {
-            "type": "string"
+            "type": "string",
+            "description": "The data source, exposed verbatim (← `Comp.SourceName`), e.g. \"Nils Holgersson\", \"Sedis-AB\"."
           },
           "insertedOnUtc": {
             "type": "string",
+            "description": "The ISO-8601 UTC instant the row was inserted (← `Comp.InsertedOnUtc`).",
             "format": "date-time"
           },
           "lastUpdatedUtc": {
             "type": "string",
+            "description": "The data-freshness contract (D-37 ETag source): the latest of the row-level freshness timestamps,\n`MAX(UpdatedOnUtc, RefreshedFromSourceOnUtc, FrozenOnUtc, InsertedOnUtc)`. Always populated (never a constant\n`null` — see the type remarks).",
             "format": "date-time"
           },
           "isLocked": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "True when the row is locked (← `Comp.IsLocked`)."
           },
           "freezeOnSourceChanges": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Phase-53 freeze state: true when the row is pinned and should not refresh from source."
           },
           "sourceUpdateAvailable": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "True when the source has been recalculated since this row was last refreshed."
           },
           "sourceUpdateAvailableSinceUtc": {
             "type": [
               "null",
               "string"
             ],
+            "description": "The ISO-8601 UTC instant a source update became available, when known.",
             "format": "date-time"
           },
           "refreshedFromSourceOnUtc": {
@@ -4384,6 +5651,7 @@
               "null",
               "string"
             ],
+            "description": "The ISO-8601 UTC instant the row was last refreshed from its source, when known.",
             "format": "date-time"
           },
           "frozenOnUtc": {
@@ -4391,9 +5659,12 @@
               "null",
               "string"
             ],
+            "description": "The ISO-8601 UTC instant the row was frozen, when frozen.",
             "format": "date-time"
           },
-          "geometry": { },
+          "geometry": {
+            "description": "GeoJSON geometry (SRID 4326), opt-in via `?fields=…,geometry` (D-25). Omitted by default\n(payload weight + geography-materialization cost). Populated server-side in 62-07 AFTER the page\nmaterializes (a settable member so the read service can attach the simplified Shape without an\nimmutable `with` against the abstract base)."
+          },
           "belongsToJamforelseobjekt": {
             "type": [
               "null",
@@ -4401,7 +5672,8 @@
             ],
             "items": {
               "$ref": "#/components/schemas/CompLineageRef"
-            }
+            },
+            "description": "The tenant's Jämförelseobjekt (clone Zones) this Comp belongs to (the bidirectional clone-membership\nlineage, 62-11), opt-in via `?fields=…,belongsToJamforelseobjekt`. The 2-hop REVERSE: the\ncaller's clones whose source SedisObjekt `ContainingComps` include this row — i.e.\n`{ clone Zone : clone.IsCloneOfComp ∈ this.PartOfCompCollections }`. Omitted by default;\npopulated through the TENANT-FILTERED context (Risk E) so a caller only ever sees its own clones.\nSettable so the read service can attach it post-materialization."
           },
           "tags": {
             "type": [
@@ -4410,11 +5682,15 @@
             ],
             "items": {
               "type": "string"
-            }
+            },
+            "description": "The Comp's tags, opt-in via `?fields=…,tags`. Omitted by default; populated in 62-07."
           }
-        }
+        },
+        "description": "A Fastighet — the v2 reshape of a PropertyUnit\n(item type for `GET /v2/fastighetsbenchmark/property-units`). Extends\nCompBaseResponse (OpenAPI `allOf`) with the property-unit-specific fields."
       },
-      "QuarterId": { },
+      "QuarterId": {
+        "description": "Identifier for a calendar quarter, encoded as `yyyyq` (e.g. `20251`).\nThe encoded form is the persisted database value and the JSON representation."
+      },
       "UpdateSamlingRequest": {
         "required": [
           "name"
@@ -4426,15 +5702,18 @@
             "type": [
               "null",
               "string"
-            ]
+            ],
+            "description": "The Samling's display name (required)."
           },
           "containingCompSedisIds": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "The SedisIds of the member Fastigheter (PropertyUnits) this Samling should aggregate AFTER the\nupdate — a full replace of the member set. Only the calling tenant's own PropertyUnits are linked\n(the update service filters by owner + source); SedisIds outside the tenant are silently ignored,\nnever written cross-tenant."
           }
-        }
+        },
+        "description": "The request body for `PUT /v2/fastighetsbenchmark/samlingar/{sedisId}` — a FULL REPLACE of an\nexisting customer-owned Samling's name and member set (SED-904). Same shape as\nCreateSamlingRequest (a name plus the SedisIds of the member Fastigheter the collection\naggregates); kept as a distinct type so the create- and update-contracts can evolve independently and\nthe OpenAPI document names them separately."
       },
       "ValidationProblemDetails": {
         "type": "object",
@@ -4500,39 +5779,49 @@
             ],
             "items": {
               "$ref": "#/components/schemas/CompLineageRef"
-            }
+            },
+            "description": "The tenant's property-units contained in this Jämförelseobjekt's source SedisObjekt (the\nbidirectional clone-membership lineage, 62-11), opt-in via `?fields=…,containsPropertyUnits`.\nThe 2-hop FORWARD: `thisZone.IsCloneOfComp → SedisObjekt → ContainingComps`, read through the\nTENANT-FILTERED context so only the caller's own units surface. Populated only on clone Zones\n(Jämförelseobjekt); `null`/omitted otherwise and by default. Settable so the read service can\nattach it post-materialization."
           },
           "sedisId": {
-            "type": "string"
+            "type": "string",
+            "description": "The Sedis key (← `Comp.SedisId`): assigned by Sedis, never changes, case-sensitive — the id to store\nand use in later calls. Filterable via `?sedisId=` (+ `in:`)."
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "The display name (← `Comp.Name`)."
           },
           "sourceName": {
-            "type": "string"
+            "type": "string",
+            "description": "The data source, exposed verbatim (← `Comp.SourceName`), e.g. \"Nils Holgersson\", \"Sedis-AB\"."
           },
           "insertedOnUtc": {
             "type": "string",
+            "description": "The ISO-8601 UTC instant the row was inserted (← `Comp.InsertedOnUtc`).",
             "format": "date-time"
           },
           "lastUpdatedUtc": {
             "type": "string",
+            "description": "The data-freshness contract (D-37 ETag source): the latest of the row-level freshness timestamps,\n`MAX(UpdatedOnUtc, RefreshedFromSourceOnUtc, FrozenOnUtc, InsertedOnUtc)`. Always populated (never a constant\n`null` — see the type remarks).",
             "format": "date-time"
           },
           "isLocked": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "True when the row is locked (← `Comp.IsLocked`)."
           },
           "freezeOnSourceChanges": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Phase-53 freeze state: true when the row is pinned and should not refresh from source."
           },
           "sourceUpdateAvailable": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "True when the source has been recalculated since this row was last refreshed."
           },
           "sourceUpdateAvailableSinceUtc": {
             "type": [
               "null",
               "string"
             ],
+            "description": "The ISO-8601 UTC instant a source update became available, when known.",
             "format": "date-time"
           },
           "refreshedFromSourceOnUtc": {
@@ -4540,6 +5829,7 @@
               "null",
               "string"
             ],
+            "description": "The ISO-8601 UTC instant the row was last refreshed from its source, when known.",
             "format": "date-time"
           },
           "frozenOnUtc": {
@@ -4547,9 +5837,12 @@
               "null",
               "string"
             ],
+            "description": "The ISO-8601 UTC instant the row was frozen, when frozen.",
             "format": "date-time"
           },
-          "geometry": { },
+          "geometry": {
+            "description": "GeoJSON geometry (SRID 4326), opt-in via `?fields=…,geometry` (D-25). Omitted by default\n(payload weight + geography-materialization cost). Populated server-side in 62-07 AFTER the page\nmaterializes (a settable member so the read service can attach the simplified Shape without an\nimmutable `with` against the abstract base)."
+          },
           "belongsToJamforelseobjekt": {
             "type": [
               "null",
@@ -4557,7 +5850,8 @@
             ],
             "items": {
               "$ref": "#/components/schemas/CompLineageRef"
-            }
+            },
+            "description": "The tenant's Jämförelseobjekt (clone Zones) this Comp belongs to (the bidirectional clone-membership\nlineage, 62-11), opt-in via `?fields=…,belongsToJamforelseobjekt`. The 2-hop REVERSE: the\ncaller's clones whose source SedisObjekt `ContainingComps` include this row — i.e.\n`{ clone Zone : clone.IsCloneOfComp ∈ this.PartOfCompCollections }`. Omitted by default;\npopulated through the TENANT-FILTERED context (Risk E) so a caller only ever sees its own clones.\nSettable so the read service can attach it post-materialization."
           },
           "tags": {
             "type": [
@@ -4566,9 +5860,11 @@
             ],
             "items": {
               "type": "string"
-            }
+            },
+            "description": "The Comp's tags, opt-in via `?fields=…,tags`. Omitted by default; populated in 62-07."
           }
-        }
+        },
+        "description": "A Zone — the v2 reshape of a Zone (item type for the TWO Zone\nresources: `/jamforelseobjekt` (clone, tenant-scoped) and `/reference-zones` (SedisAB-owned\nnon-clone, reference data)). The shape is identical across the two — the <b>URL is the discriminator</b>\n(D-39): a Jämförelseobjekt is a clone (`Zone.IsCloneOfComp` set), a reference-zone is a non-clone."
       }
     },
     "securitySchemes": {

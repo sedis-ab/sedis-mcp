@@ -82,12 +82,12 @@ describe("API key never appears in any tool output or stderr (BLOCKING)", () => 
     );
   }
 
-  it("forwards the key only as X-Api-Key and leaks it nowhere across all 12 tools + all error paths", async () => {
+  it("forwards the key only as X-Api-Key and leaks it nowhere across all 14 tools + all error paths", async () => {
     installFetchStub();
     handle = await connectInProcess();
 
     const tools = (await handle.client.listTools()).tools;
-    expect(tools.length).toBe(12); // sanity: all tools present to scan (10 data + set/clear_session)
+    expect(tools.length).toBe(14); // sanity: all tools present to scan (12 data + set/clear_session)
 
     const allResults: string[] = [];
     // Call every tool multiple times so each cycles through the forced error statuses

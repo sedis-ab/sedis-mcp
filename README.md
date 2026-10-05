@@ -147,11 +147,13 @@ leak existence).
 | Tool                                       | What it does                                                              |
 | ------------------------------------------ | ------------------------------------------------------------------------ |
 | `fastighetsbenchmark_find_parameter`       | Discover the right real-estate benchmark parameter by name.              |
-| `fastighetsbenchmark_search_property_units`| Find YOUR property units (Fastighet) by name, municipality, zone, or **property-type name** (`propertyTypeName`, e.g. "Office"/"Kontor"). |
+| `fastighetsbenchmark_search_property_units`| Find YOUR property units (Fastighet) by exact `name`, name fragment, municipality, zone, or **property-type name** (`propertyTypeName`, e.g. "Office"/"Kontor"). |
 | `fastighetsbenchmark_list_samlingar`       | List YOUR collections (Samling) and their members.                       |
 | `fastighetsbenchmark_list_jamforelseobjekt`| List YOUR comparison zones (Jämförelseobjekt).                           |
 | `fastighetsbenchmark_get_comp_timeseries`  | Pull the actual CompDatum benchmarking time-series (self-describing values). |
 | `fastighetsbenchmark_list_reference_zones` | List the shared, Sedis-owned market **reference zones** (same for every key). |
+| `fastighetsbenchmark_list_municipalities`  | Look up **municipality ids** for the `municipalityId` filter — by name or official code (e.g. SCB `0180`). |
+| `fastighetsbenchmark_list_property_types`  | Look up **property-type ids** for the `propertyType` filter (the EB0 domain). |
 
 Names and descriptions are **English by default**; pass `lang: "sv"` on the
 parameter-discovery and property-unit tools to get Swedish.

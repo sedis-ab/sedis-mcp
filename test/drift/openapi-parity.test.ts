@@ -34,6 +34,8 @@ const COVERED = new Set<string>([
   "/fastighetsbenchmark/jamforelseobjekt", // fastighetsbenchmark_list_jamforelseobjekt
   "/fastighetsbenchmark/comp-data", // fastighetsbenchmark_get_comp_timeseries
   "/fastighetsbenchmark/reference-zones", // fastighetsbenchmark_list_reference_zones (D-02.4)
+  "/fastighetsbenchmark/municipalities", // fastighetsbenchmark_list_municipalities (SED-1093)
+  "/fastighetsbenchmark/property-types", // fastighetsbenchmark_list_property_types (SED-1093)
 ]);
 
 // Endpoints intentionally NOT wrapped by a read tool:

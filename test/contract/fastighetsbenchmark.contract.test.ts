@@ -18,6 +18,8 @@ import {
   listSamlingarOutput,
   listJamforelseobjektOutput,
   listReferenceZonesOutput,
+  listMunicipalitiesOutput,
+  listPropertyTypesOutput,
 } from "../../src/schemas/fastighetsbenchmark.js";
 import { getCompTimeseriesOutput } from "../../src/schemas/compData.js";
 import { connectInProcess, type InProcessHandle } from "../_util/inProcess.js";
@@ -103,6 +105,29 @@ describe.runIf(Boolean(BASE && KEY))(
       for (const row of rows) {
         expect(row.name, "every reference-zone row carries a required name").toBeTruthy();
       }
+    });
+
+    it("list_municipalities finds a municipality by its official code (SED-1093)", async () => {
+      const res = await call("fastighetsbenchmark_list_municipalities", { code: "0180" });
+      const parsed = z.object(listMunicipalitiesOutput).safeParse(res.structuredContent);
+      expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
+      const rows = (res.structuredContent as { data?: Array<{ name?: string }> }).data ?? [];
+      expect(rows.map((r) => r.name)).toEqual(["Stockholm"]);
+    });
+
+    it("list_property_types passes listPropertyTypesOutput (SED-1093)", async () => {
+      const res = await call("fastighetsbenchmark_list_property_types", { pageSize: 5 });
+      const parsed = z.object(listPropertyTypesOutput).safeParse(res.structuredContent);
+      expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
+      expectPaging(res.structuredContent);
+    });
+
+    it("search_property_units with includeGeometry is accepted by v2 (no unknown ?fields=)", async () => {
+      // Before SED-1093 the tool asked for ?fields=…propertyType,municipalityId… — fields the v2
+      // whitelist rejects — so every includeGeometry call answered 400.
+      const res = await call("fastighetsbenchmark_search_property_units", { includeGeometry: true, pageSize: 2 });
+      const parsed = z.object(searchPropertyUnitsOutput).safeParse(res.structuredContent);
+      expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
     });
 
     it("search_property_units accepts the propertyTypeName name filter (D-02.2)", async () => {

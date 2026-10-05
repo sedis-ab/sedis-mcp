@@ -6,6 +6,8 @@
 //   fastighetsbenchmark_search_property_units → GET /fastighetsbenchmark/property-units
 //   fastighetsbenchmark_list_samlingar        → GET /fastighetsbenchmark/samlingar
 //   fastighetsbenchmark_list_jamforelseobjekt → GET /fastighetsbenchmark/jamforelseobjekt
+//   fastighetsbenchmark_list_municipalities   → GET /fastighetsbenchmark/municipalities
+//   fastighetsbenchmark_list_property_types   → GET /fastighetsbenchmark/property-types
 //
 // v1.x SDK idiom (AI-SPEC §3 Pitfall #3): the TOP-LEVEL inputSchema/outputSchema
 // passed to registerTool must be a *raw shape* — a plain object of z.* validators,
@@ -142,6 +144,10 @@ export const findParameterOutput = {
 // into the heavy geometry member via ?fields= (D-08 / T-63-11).
 
 export const searchPropertyUnitsInput = {
+  name: z
+    .string()
+    .optional()
+    .describe("Exact property-unit name (your own designation), case-insensitive — returns that one unit, e.g. 'Kontoret Gladan 4'."),
   nameContains: z
     .string()
     .optional()
@@ -150,12 +156,12 @@ export const searchPropertyUnitsInput = {
     .number()
     .int()
     .optional()
-    .describe("Property-type id (int, NOT a name); discover ids from find_parameter enumValues, e.g. 1 = Kontor/Office."),
+    .describe("Property-type id (int, NOT a name); look ids up with fastighetsbenchmark_list_property_types, e.g. 2."),
   municipalityId: z
     .number()
     .int()
     .optional()
-    .describe("Municipality id to filter by, e.g. 180 (Stockholm)."),
+    .describe("Municipality id to filter by; look ids up with fastighetsbenchmark_list_municipalities (e.g. Stockholm = 21)."),
   belongsToJamforelseobjektSedisId: z
     .string()
     .optional()
@@ -182,13 +188,27 @@ const PropertyTypeRef = z.object({
   name: z.string().describe("Property-type label, e.g. 'Kontor'/'Office'."),
 }).passthrough();
 
+const MunicipalityRef = z.object({
+  id: z.number().int().describe("Municipality id; use as the municipalityId filter, e.g. 21."),
+  name: z.string().describe("Municipality name, e.g. 'Stockholm'."),
+  code: z.string().nullable().optional().describe("Official municipality code (Sweden: SCB kommunkod), e.g. '0180'."),
+}).passthrough();
+
+const PropertyUnitAddress = z.object({
+  streetNameAndNumber: z.string().nullable().optional().describe("Street name and number, e.g. 'Sveavägen 12'."),
+  postalCode: z.string().nullable().optional().describe("Postal code, e.g. '111 57'."),
+  postalTown: z.string().nullable().optional().describe("Postal town, e.g. 'Stockholm'."),
+  countryCode: z.string().nullable().optional().describe("ISO 3166-1 alpha-2 country, e.g. 'SE'."),
+}).passthrough();
+
 const PropertyUnitRow = z.object({
   sedisId: z
     .string()
     .describe("Stable Comp sedisId; pass to get_comp_timeseries via sedisIdIn, e.g. 'PU-1'."),
   name: z.string().nullable().optional().describe("Property-unit display name."),
   propertyType: PropertyTypeRef.nullable().optional().describe("The unit's property type as { id, name }."),
-  municipalityId: z.number().int().nullable().optional().describe("Municipality id."),
+  municipality: MunicipalityRef.nullable().optional().describe("The unit's municipality as { id, name, code }."),
+  address: PropertyUnitAddress.nullable().optional().describe("The unit's postal address { streetNameAndNumber, postalCode, postalTown, countryCode }."),
   geometry: z
     .unknown()
     .nullable()
@@ -302,5 +322,65 @@ const ReferenceZoneRow = z.object({
 
 export const listReferenceZonesOutput = {
   data: z.array(ReferenceZoneRow).describe("Shared Sedis-owned reference zones (identical for every key)."),
+  ...pagingShape,
+};
+
+// ---------------------------------------------------------------------------
+// fastighetsbenchmark_list_municipalities → GET /fastighetsbenchmark/municipalities
+// ---------------------------------------------------------------------------
+// Shared reference data (SED-1093): the ids the municipalityId filter takes.
+
+export const listMunicipalitiesInput = {
+  nameContains: z
+    .string()
+    .optional()
+    .describe("Case-insensitive municipality-name fragment, e.g. 'Stockholm'."),
+  code: z
+    .string()
+    .optional()
+    .describe("Exact official municipality code (Sweden: SCB kommunkod), e.g. '0180'."),
+  countryCode: z
+    .string()
+    .optional()
+    .describe("ISO 3166-1 alpha-2 country, e.g. 'SE'."),
+  sort,
+  page,
+  pageSize,
+};
+
+const MunicipalityRow = z.object({
+  id: z.number().int().describe("Municipality id; use as municipalityId in search_property_units, e.g. 21."),
+  name: z.string().describe("Municipality name, e.g. 'Stockholm'."),
+  countryCode: z.string().describe("ISO 3166-1 alpha-2 country, e.g. 'SE'."),
+  code: z.string().nullable().optional().describe("Official municipality code (Sweden: SCB kommunkod), e.g. '0180'; absent outside Sweden."),
+}).passthrough();
+
+export const listMunicipalitiesOutput = {
+  data: z.array(MunicipalityRow).describe("Municipalities (shared reference data)."),
+  ...pagingShape,
+};
+
+// ---------------------------------------------------------------------------
+// fastighetsbenchmark_list_property_types → GET /fastighetsbenchmark/property-types
+// ---------------------------------------------------------------------------
+// Shared reference data (SED-1093): the EB0 domain — the ids the propertyType filter takes.
+
+export const listPropertyTypesInput = {
+  nameContains: z
+    .string()
+    .optional()
+    .describe("Case-insensitive property-type-name fragment (names are Swedish), e.g. 'Kontor'."),
+  sort,
+  page,
+  pageSize,
+};
+
+const PropertyTypeRow = z.object({
+  id: z.number().int().describe("Property-type id; use as propertyType in search_property_units, e.g. 2."),
+  name: z.string().describe("Property-type name (Swedish), e.g. 'Kontor'."),
+}).passthrough();
+
+export const listPropertyTypesOutput = {
+  data: z.array(PropertyTypeRow).describe("Property types (shared reference data)."),
   ...pagingShape,
 };
