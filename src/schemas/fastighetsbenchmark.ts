@@ -194,6 +194,13 @@ const MunicipalityRef = z.object({
   code: z.string().nullable().optional().describe("Official municipality code (Sweden: SCB kommunkod), e.g. '0180'."),
 }).passthrough();
 
+const PropertyUnitAddress = z.object({
+  streetNameAndNumber: z.string().nullable().optional().describe("Street name and number, e.g. 'Sveavägen 12'."),
+  postalCode: z.string().nullable().optional().describe("Postal code, e.g. '111 57'."),
+  postalTown: z.string().nullable().optional().describe("Postal town, e.g. 'Stockholm'."),
+  countryCode: z.string().nullable().optional().describe("ISO 3166-1 alpha-2 country, e.g. 'SE'."),
+}).passthrough();
+
 const PropertyUnitRow = z.object({
   sedisId: z
     .string()
@@ -201,7 +208,7 @@ const PropertyUnitRow = z.object({
   name: z.string().nullable().optional().describe("Property-unit display name."),
   propertyType: PropertyTypeRef.nullable().optional().describe("The unit's property type as { id, name }."),
   municipality: MunicipalityRef.nullable().optional().describe("The unit's municipality as { id, name, code }."),
-  countryCode: z.string().nullable().optional().describe("ISO 3166-1 alpha-2 country of the unit, e.g. 'SE'."),
+  address: PropertyUnitAddress.nullable().optional().describe("The unit's postal address { streetNameAndNumber, postalCode, postalTown, countryCode }."),
   geometry: z
     .unknown()
     .nullable()
