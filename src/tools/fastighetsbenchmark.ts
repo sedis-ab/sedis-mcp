@@ -119,7 +119,10 @@ export function registerFastighetsbenchmarkTools(server: McpServer): void {
       description:
         "Read-only. Find YOUR property units (Fastighet) by exact name, name fragment, " +
         "property-type id, municipality, or comparison-zone membership, returning each " +
-        "unit's `sedisId`. Look up property-type and municipality ids with " +
+        "unit's `sedisId` — the stable, case-sensitive key to use in every later call. " +
+        "`name` is the customer's own designation; an official property designation " +
+        "(fastighetsbeteckning, e.g. 'Klara 1:1') is not a name and is not searchable. " +
+        "Look up property-type and municipality ids with " +
         "`fastighetsbenchmark_list_property_types` / `fastighetsbenchmark_list_municipalities`. " +
         "This is the §8 A6 flow's object-finding step: take a comparison zone from " +
         "`fastighetsbenchmark_list_jamforelseobjekt` and filter here with " +
