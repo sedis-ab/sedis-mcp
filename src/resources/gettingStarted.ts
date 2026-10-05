@@ -38,6 +38,8 @@ Typical flow:
    self-describing via \`dataType\` (read \`figure\` / \`boolean\` / \`enum\` / \`date\` accordingly)
 
 \`fastighetsbenchmark_list_reference_zones\` returns shared, Sedis-owned market reference zones.
+\`fastighetsbenchmark_list_municipalities\` and \`fastighetsbenchmark_list_property_types\` look up the
+ids the \`municipalityId\` and \`propertyType\` filters take (e.g. Stockholm = 21).
 
 ## Getting a key & configuring it
 You need a **PartnerAPI v2 key** (issued per customer by Sedis). Set it in your MCP client's

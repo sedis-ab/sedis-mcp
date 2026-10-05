@@ -42,7 +42,7 @@ export const CompDatum = z.object({
     .describe("The CompParameter code this value is for, e.g. 'NX71'."),
   valueDate: z
     .string()
-    .describe("ISO date (yyyy-MM-dd) of the period the value applies to (part of the natural key), e.g. '2025-12-31'."),
+    .describe("ISO date (yyyy-MM-dd) of the period the value applies to (part of the natural key), e.g. '2025-12-31'. Usually 31 December, but it can be any quarter-end (e.g. '2026-06-30') — do NOT assume one row per year; flows on a quarter-end are rolling 12 months."),
   dataType: z
     .enum(["decimal", "boolean", "enum", "date"])
     .describe(
