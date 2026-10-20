@@ -1,0 +1,37 @@
+name: Registry publish
+
+# Re-publishes an already-released version's server.json to the MCP registry, for when
+# the registry step in release.yml failed (it is continue-on-error by design). Run it
+# from the Actions tab on the release tag, or on main while main's server.json still
+# carries that version (a tag older than this file cannot run it). The first step
+# refuses a version npm does not serve. Metadata only: never touches npm or the Release.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write # GitHub OIDC login to the MCP registry
+  contents: read
+
+jobs:
+  registry:
+    name: publish server.json to the MCP registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Check that npm serves this version
+        run: |
+          V=$(node -p "require('./package.json').version")
+          npm view "@sedis/mcp@$V" version --prefer-online
+          node -e "const s=require('./server.json');if(s.version!==process.argv[1]||s.packages[0].version!==process.argv[1]){console.error('server.json is not at '+process.argv[1]);process.exit(1)}" "$V"
+
+      - name: Fetch mcp-publisher CLI
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Log in to the MCP registry via GitHub OIDC (no secret)
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish server.json to the MCP registry
+        run: ./mcp-publisher publish

@@ -92,14 +92,24 @@ jobs:
       # continue-on-error: the registry listing is metadata-only discoverability — it
       # must NEVER block the npm publish, the GitHub Release, or the .mcpb asset (which
       # all run after it). A registry hiccup should not fail the release.
+      # The registry validates the version against npm's public registry, which lagged
+      # more than 80 s behind `npm publish` for both v1.2.0 and v1.2.1 — so wait until npm
+      # serves it first. A missed version is never caught up by a later release; publish it
+      # with the registry-publish workflow (workflow_dispatch on the tag).
       - name: Publish server.json to the MCP registry
         run: |
+          V=$(node -p "require('./package.json').version")
+          for i in $(seq 1 40); do
+            npm view "@sedis/mcp@$V" version --prefer-online >/dev/null 2>&1 && break
+            echo "npm does not serve @sedis/mcp@$V yet ($i/40); waiting 15s..."
+            sleep 15
+          done
           for i in 1 2 3 4; do
             ./mcp-publisher publish && exit 0
-            echo "registry publish attempt $i failed (the just-published npm version may still be propagating); retrying in 20s..."
+            echo "registry publish attempt $i failed; retrying in 20s..."
             sleep 20
           done
-          echo "MCP registry publish did not succeed after retries — non-fatal; it will catch up on the next release."
+          echo "::warning::MCP registry publish failed for $V — run the registry-publish workflow on tag v$V."
           exit 1
         continue-on-error: true
 
